@@ -31,6 +31,17 @@ import org.apache.rocketmq.remoting.exception.RemotingCommandException;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
 
+/**
+ * 在消息传输过程中对所有数据内容的封装，不但包含了所有的数据结构，还包含了编码解码操作
+ *
+ *
+ *
+ * +----------------+--------------------------------+----------------+----------------+
+ * \  消息长度  4B   \    序列化类型&&头部长度 (1B + 3B) \   消息头数据     \   消息主体数据   \
+ * +----------------+--------------------------------+----------------+----------------+
+ *
+ *
+ */
 public class RemotingCommand {
     public static final String SERIALIZE_TYPE_PROPERTY = "rocketmq.serialize.type";
     public static final String SERIALIZE_TYPE_ENV = "ROCKETMQ_SERIALIZE_TYPE";
@@ -69,12 +80,43 @@ public class RemotingCommand {
         }
     }
 
+    /**
+     * request: 请求操作码,请求接收方根据不同的代码做不同的操作
+     * response: 应答结果代码,0表示成功,非0表示各种错误代码
+     */
     private int code;
+
+    /**
+     * request & response: 请求方和应答方实现语言
+     */
     private LanguageCode language = LanguageCode.JAVA;
+
+    /**
+     * request & response: 请求方和应答方程序版本
+     */
     private int version = 0;
+
+    /**
+     * request: 请求方在同一连接上不同的请求标识代码,多线程连接复用使用
+     * response: 应答方不修改直接返回
+     */
     private int opaque = requestId.getAndIncrement();
+
+    /**
+     * request & response: 通信层的标志位
+     */
     private int flag = 0;
+
+    /**
+     * request: 传输自定义文本信息
+     * response: 错误详细的描述信息
+     */
     private String remark;
+
+    /**
+     * request: 请求自定义字段
+     * response: 应答自定义字段
+     */
     private HashMap<String, String> extFields;
     private transient CommandCustomHeader customHeader;
 
@@ -137,20 +179,27 @@ public class RemotingCommand {
     }
 
     public static RemotingCommand decode(final byte[] array) {
+        // 字节数组转为 ByteBuffer进行解码
         ByteBuffer byteBuffer = ByteBuffer.wrap(array);
         return decode(byteBuffer);
     }
 
     public static RemotingCommand decode(final ByteBuffer byteBuffer) {
+        //等到消息的总长度
         int length = byteBuffer.limit();
+        //得到消息中int类型的长度,此处看代码是直接获取的(序列化类型&头长度)这一段,
+        // 猜测是不是接收到的之后ChannelHandler直接去掉了
         int oriHeaderLen = byteBuffer.getInt();
+        // 消息头长度
         int headerLength = getHeaderLength(oriHeaderLen);
 
+        //position 到了头长度末尾,直接get头长度的字节得到消息头
         byte[] headerData = new byte[headerLength];
         byteBuffer.get(headerData);
 
         RemotingCommand cmd = headerDecode(headerData, getProtocolType(oriHeaderLen));
 
+        //出去消息头4个字节 和 消息头长 剩下的为消息体
         int bodyLength = length - 4 - headerLength;
         byte[] bodyData = null;
         if (bodyLength > 0) {
@@ -169,6 +218,7 @@ public class RemotingCommand {
     private static RemotingCommand headerDecode(byte[] headerData, SerializeType type) {
         switch (type) {
             case JSON:
+                // 调用 RemotingSerializable 中的decode 解码json 返回 RemotingCommand
                 RemotingCommand resultJson = RemotingSerializable.decode(headerData, RemotingCommand.class);
                 resultJson.setSerializeTypeCurrentRPC(type);
                 return resultJson;
@@ -209,9 +259,12 @@ public class RemotingCommand {
     }
 
     public static byte[] markProtocolType(int source, SerializeType type) {
+        //长度为4 字节数组
         byte[] result = new byte[4];
 
+        // 序列化类型编码
         result[0] = type.getCode();
+        //int 4个字节长度数字写入长度3个字节中
         result[1] = (byte) ((source >> 16) & 0xFF);
         result[2] = (byte) ((source >> 8) & 0xFF);
         result[3] = (byte) (source & 0xFF);
@@ -326,18 +379,21 @@ public class RemotingCommand {
     }
 
     public ByteBuffer encode() {
-        // 1> header length size
+        // 1> header length size 协议组成第二部分序列化类型和头长度,占用4个字节
         int length = 4;
 
-        // 2> header data length
+        // 2> header data length 协议组成的第三部分,首先得到消息头,再加上该消息头长度
         byte[] headerData = this.headerEncode();
         length += headerData.length;
 
-        // 3> body data length
+        // 3> body data length 第四部分消息体长度
         if (this.body != null) {
             length += body.length;
         }
 
+        /**
+         * 协议第一部分,加上记录整个消息长度的4个字节,申请缓冲区
+         */
         ByteBuffer result = ByteBuffer.allocate(4 + length);
 
         // length
@@ -360,7 +416,9 @@ public class RemotingCommand {
     }
 
     private byte[] headerEncode() {
+        // 将消息头中自定义的字段写入 extFields ----- a.1
         this.makeCustomHeaderToNet();
+        // 判断目前采用的序列化方式 主要看下json, 编码 RemotingCommand 为json格式,返回编码后的字节数组 ------ a.2
         if (SerializeType.ROCKETMQ == serializeTypeCurrentRPC) {
             return RocketMQSerializable.rocketMQProtocolEncode(this);
         } else {
@@ -370,24 +428,30 @@ public class RemotingCommand {
 
     public void makeCustomHeaderToNet() {
         if (this.customHeader != null) {
+            //获取所有声明的成员变量
             Field[] fields = getClazzFields(customHeader.getClass());
             if (null == this.extFields) {
                 this.extFields = new HashMap<String, String>();
             }
 
             for (Field field : fields) {
+                //成员变量修饰符非 static
                 if (!Modifier.isStatic(field.getModifiers())) {
+                    // 成员变量名
                     String name = field.getName();
+                    // 如果成员变量名不是以this开头的 todo this开头代表啥？
                     if (!name.startsWith("this")) {
                         Object value = null;
                         try {
                             field.setAccessible(true);
+                            //成员变量值
                             value = field.get(this.customHeader);
                         } catch (Exception e) {
                             log.error("Failed to access field [{}]", name, e);
                         }
 
                         if (value != null) {
+                            // 插入 HashMap 中
                             this.extFields.put(name, value.toString());
                         }
                     }

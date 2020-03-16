@@ -47,12 +47,19 @@ import org.apache.rocketmq.remoting.common.RemotingUtil;
 
 public class RouteInfoManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
+    // 两分钟没更新就视为无效
     private final static long BROKER_CHANNEL_EXPIRED_TIME = 1000 * 60 * 2;
+    // 读写锁
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
+    // topic 和 broker的Map，保存了topic在每个broker上的读写Queue的个数以及读写权限
     private final HashMap<String/* topic */, List<QueueData>> topicQueueTable;
+    // 注册到nameserv上的所有broker，按照brokername分组
     private final HashMap<String/* brokerName */, BrokerData> brokerAddrTable;
+    // 集群 与 Broker的对应关系
     private final HashMap<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable;
+    // broker最新的心跳时间以及配置版本号
     private final HashMap<String/* brokerAddr */, BrokerLiveInfo> brokerLiveTable;
+    // broker和FilterServer的对应关系
     private final HashMap<String/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;
 
     public RouteInfoManager() {
@@ -99,6 +106,7 @@ public class RouteInfoManager {
         return topicList.encode();
     }
 
+    // TODO: queuedata
     public RegisterBrokerResult registerBroker(
         final String clusterName,
         final String brokerAddr,
@@ -113,6 +121,8 @@ public class RouteInfoManager {
             try {
                 this.lock.writeLock().lockInterruptibly();
 
+                //根据集群名字，获取当前集群下面的所有brokerName
+                //brokerName表示是一组broker(主从)：如一个brokerName的值为：broker-a，可能包括一个master跟它的多个slave
                 Set<String> brokerNames = this.clusterAddrTable.get(clusterName);
                 if (null == brokerNames) {
                     brokerNames = new HashSet<String>();
@@ -122,9 +132,11 @@ public class RouteInfoManager {
 
                 boolean registerFirst = false;
 
+                //根据brokerName从brokerAddrTable中获取brokerDate信息
                 BrokerData brokerData = this.brokerAddrTable.get(brokerName);
                 if (null == brokerData) {
                     registerFirst = true;
+                    // 如果当前不存在brokerDate，即还没有broker向namesrv注册，则直接将当前broker信息put加入
                     brokerData = new BrokerData(clusterName, brokerName, new HashMap<Long, String>());
                     this.brokerAddrTable.put(brokerName, brokerData);
                 }
@@ -142,6 +154,8 @@ public class RouteInfoManager {
                 String oldAddr = brokerData.getBrokerAddrs().put(brokerId, brokerAddr);
                 registerFirst = registerFirst || (null == oldAddr);
 
+                // 如果是Broker是Master节点，并且Topic信息更新或者是首次注册，那么创建更新topic队列信息
+                //如果topicConfigWrapper不为空，且当前brokerId == 0，即为当前broker为master
                 if (null != topicConfigWrapper
                     && MixAll.MASTER_ID == brokerId) {
                     if (this.isBrokerTopicConfigChanged(brokerAddr, topicConfigWrapper.getDataVersion())
@@ -156,6 +170,7 @@ public class RouteInfoManager {
                     }
                 }
 
+                // 更新BrokerLiveInfo状态信息
                 BrokerLiveInfo prevBrokerLiveInfo = this.brokerLiveTable.put(brokerAddr,
                     new BrokerLiveInfo(
                         System.currentTimeMillis(),
@@ -173,7 +188,7 @@ public class RouteInfoManager {
                         this.filterServerTable.put(brokerAddr, filterServerList);
                     }
                 }
-
+                // 如果此broker为从节点，则需要查找该broker的master节点信息，并更新对应的masterAddress属性。
                 if (MixAll.MASTER_ID != brokerId) {
                     String masterAddr = brokerData.getBrokerAddrs().get(MixAll.MASTER_ID);
                     if (masterAddr != null) {
@@ -440,22 +455,34 @@ public class RouteInfoManager {
         }
     }
 
+    /**
+     * 清除离线的Broker信息
+     * @param remoteAddr Broker的地址
+     * @param channel Broker和Name Server之间的连接通道，是一个NioSocketChannel实例
+     */
     public void onChannelDestroy(String remoteAddr, Channel channel) {
         String brokerAddrFound = null;
         if (channel != null) {
             try {
                 try {
+                    /**
+                     * 通过channel从brokerLiveTable中找出对应的Broker地址
+                     * 由于只是读，所以只需要获取readLock()
+                     * 若该Broker已经从存活的Broker地址列表中被清除，则直接使用remoteAddr
+                     */
                     this.lock.readLock().lockInterruptibly();
                     Iterator<Entry<String, BrokerLiveInfo>> itBrokerLiveTable =
                         this.brokerLiveTable.entrySet().iterator();
                     while (itBrokerLiveTable.hasNext()) {
                         Entry<String, BrokerLiveInfo> entry = itBrokerLiveTable.next();
+                        // 如果当前channel即为要关闭的channel
                         if (entry.getValue().getChannel() == channel) {
                             brokerAddrFound = entry.getKey();
                             break;
                         }
                     }
                 } finally {
+                    // 解锁
                     this.lock.readLock().unlock();
                 }
             } catch (Exception e) {
@@ -474,8 +501,16 @@ public class RouteInfoManager {
             try {
                 try {
                     this.lock.writeLock().lockInterruptibly();
+                    // 从存活的Broker地址列表中清除该Broker
                     this.brokerLiveTable.remove(brokerAddrFound);
+                    // 从Filter Server中清除该Broker
                     this.filterServerTable.remove(brokerAddrFound);
+                    /*
+                     * 通过brokerAddrFound从Broker列表中找到该Broker，并删除
+                     * 删除的是BrokerData.brokerAddrs的元素
+                     * 上述操作之后，如果BrokerData.brokerAddrs空了，则从Broker列表中将Broker Name对应的元素删除
+                     * 删除的是成员变量brokerAddrTable的元素
+                     */
                     String brokerNameFound = null;
                     boolean removeBrokerName = false;
                     Iterator<Entry<String, BrokerData>> itBrokerAddrTable =
@@ -753,9 +788,15 @@ public class RouteInfoManager {
 }
 
 class BrokerLiveInfo {
+    // 最后一次更新时间
     private long lastUpdateTimestamp;
+    // 版本号
     private DataVersion dataVersion;
     private Channel channel;
+    /**
+     * HA Broker的地址
+     * 是Slave从Master拉取数据时链接的地址，由brokerIp2+HA端口构成
+     */
     private String haServerAddr;
 
     public BrokerLiveInfo(long lastUpdateTimestamp, DataVersion dataVersion, Channel channel,

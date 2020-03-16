@@ -71,19 +71,31 @@ import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 public class NettyRemotingClient extends NettyRemotingAbstract implements RemotingClient {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(RemotingHelper.ROCKETMQ_REMOTING);
 
+    // 加锁超时时间 3s
     private static final long LOCK_TIMEOUT_MILLIS = 3000;
 
+    // 配置类
     private final NettyClientConfig nettyClientConfig;
+
+    // 客户端引导
     private final Bootstrap bootstrap = new Bootstrap();
+
+    // 处理事件 EventLoopGroup
     private final EventLoopGroup eventLoopGroupWorker;
+
+    // channel表的锁
     private final Lock lockChannelTables = new ReentrantLock();
     private final ConcurrentMap<String /* addr */, ChannelWrapper> channelTables = new ConcurrentHashMap<String, ChannelWrapper>();
 
     private final Timer timer = new Timer("ClientHouseKeepingService", true);
 
+    //  namesrv地址列表的原子引用
     private final AtomicReference<List<String>> namesrvAddrList = new AtomicReference<List<String>>();
+
     private final AtomicReference<String> namesrvAddrChoosed = new AtomicReference<String>();
     private final AtomicInteger namesrvIndex = new AtomicInteger(initValueIndex());
+
+    // NamesrvChannel 锁
     private final Lock lockNamesrvChannel = new ReentrantLock();
 
     private final ExecutorService publicExecutor;
@@ -598,6 +610,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         this.callbackExecutor = callbackExecutor;
     }
 
+    //  future包装类
     static class ChannelWrapper {
         private final ChannelFuture channelFuture;
 
@@ -697,5 +710,13 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 NettyRemotingClient.this.putNettyEvent(new NettyEvent(NettyEventType.EXCEPTION, remoteAddress, ctx.channel()));
             }
         }
+    }
+
+    public static void main(String[] args) throws InterruptedException, RemotingSendRequestException, RemotingTimeoutException, RemotingTooMuchRequestException, RemotingConnectException {
+        NettyRemotingClient client = new NettyRemotingClient(new NettyClientConfig());
+        client.start();
+
+        client.invokeOneway("127.0.0.1:8899", RemotingCommand.createRequestCommand(1, null), 3000L);
+        client.shutdown();
     }
 }

@@ -31,9 +31,17 @@ import org.apache.rocketmq.namesrv.NamesrvController;
 public class KVConfigManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
 
+    // Name Server主要控制类
     private final NamesrvController namesrvController;
 
+    // 读写锁
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
+
+    /**
+     * 以命名空间为单位存储的配置文件，存数示例如下：
+     * {"configTable":{"ORDER_TOPIC_CONFIG":{"UnitTest":"test"}}}%
+     * 此处的Namespace为ORDER_TOPIC_CONFIG，暂时不知道Namespace具体的含义
+     */
     private final HashMap<String/* Namespace */, HashMap<String/* Key */, String/* Value */>> configTable =
         new HashMap<String, HashMap<String, String>>();
 

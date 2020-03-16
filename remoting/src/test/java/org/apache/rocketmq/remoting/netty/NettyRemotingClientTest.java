@@ -36,4 +36,10 @@ public class NettyRemotingClientTest {
 
         assertThat(remotingClient.getCallbackExecutor()).isEqualTo(customized);
     }
+
+
+    @Test
+    public void clientTest(){
+
+    }
 }

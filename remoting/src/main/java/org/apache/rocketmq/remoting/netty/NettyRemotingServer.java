@@ -65,12 +65,18 @@ import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
 public class NettyRemotingServer extends NettyRemotingAbstract implements RemotingServer {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(RemotingHelper.ROCKETMQ_REMOTING);
+    // Netty引导
     private final ServerBootstrap serverBootstrap;
+    // 处理网络IO
     private final EventLoopGroup eventLoopGroupSelector;
+    // 接受连接请求
     private final EventLoopGroup eventLoopGroupBoss;
+    // Netty Server配置
     private final NettyServerConfig nettyServerConfig;
 
+    // 处理接受消息的线程池
     private final ExecutorService publicExecutor;
+    // 监听Channel,用于监听 Client 和 Broker 心跳
     private final ChannelEventListener channelEventListener;
 
     private final Timer timer = new Timer("ServerHouseKeepingService", true);
@@ -95,6 +101,9 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
     public NettyRemotingServer(final NettyServerConfig nettyServerConfig,
         final ChannelEventListener channelEventListener) {
+        /**
+         * 调用NettyRemotingAbstract方法中的构造方法,设置单向请求数,双向请求数
+         */
         super(nettyServerConfig.getServerOnewaySemaphoreValue(), nettyServerConfig.getServerAsyncSemaphoreValue());
         this.serverBootstrap = new ServerBootstrap();
         this.nettyServerConfig = nettyServerConfig;
@@ -105,6 +114,9 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
             publicThreadNums = 4;
         }
 
+        /**
+         * 定义用来处理接收消息的线程池,供之后的注册处理器方法调用
+         */
         this.publicExecutor = Executors.newFixedThreadPool(publicThreadNums, new ThreadFactory() {
             private AtomicInteger threadIndex = new AtomicInteger(0);
 
@@ -114,6 +126,9 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
             }
         });
 
+        /**
+         * 定义处理网络IO的线程池,通过配置是否采用epoll模式来定义
+         */
         if (useEpoll()) {
             this.eventLoopGroupBoss = new EpollEventLoopGroup(1, new ThreadFactory() {
                 private AtomicInteger threadIndex = new AtomicInteger(0);
@@ -181,6 +196,9 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
     @Override
     public void start() {
+        /**
+         * 处理 ChannelHandler 的线程池
+         */
         this.defaultEventExecutorGroup = new DefaultEventExecutorGroup(
             nettyServerConfig.getServerWorkerThreads(),
             new ThreadFactory() {
@@ -209,21 +227,33 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
                     @Override
                     public void initChannel(SocketChannel ch) throws Exception {
                         ch.pipeline()
+                                /**
+                                 * 处理TLS握手的 ChannelHandler
+                                 */
                             .addLast(defaultEventExecutorGroup, HANDSHAKE_HANDLER_NAME, handshakeHandler)
+                            /**
+                             * 接受消息处理包括编解码、活跃Channel的监测、连接处理、事件处理
+                             */
                             .addLast(defaultEventExecutorGroup,
-                                encoder,
-                                new NettyDecoder(),
-                                new IdleStateHandler(0, 0, nettyServerConfig.getServerChannelMaxIdleTimeSeconds()),
-                                connectionManageHandler,
-                                serverHandler
+                            encoder,
+                            new NettyDecoder(),
+                            new IdleStateHandler(0, 0, nettyServerConfig.getServerChannelMaxIdleTimeSeconds()),
+                            connectionManageHandler,
+                            serverHandler
                             );
                     }
                 });
 
+        /**
+         * 使用对象池,重用缓冲区
+         */
         if (nettyServerConfig.isServerPooledByteBufAllocatorEnable()) {
             childHandler.childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
         }
 
+        /**
+         *异步地绑定服务器,调用 sync()方法阻塞等待直到绑定完成
+         */
         try {
             ChannelFuture sync = this.serverBootstrap.bind().sync();
             InetSocketAddress addr = (InetSocketAddress) sync.channel().localAddress();
@@ -236,6 +266,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
             this.nettyEventExecutor.start();
         }
 
+        // RocketMQ 每1s清理一次ResponseFuture表 将无效的清理
         this.timer.scheduleAtFixedRate(new TimerTask() {
 
             @Override
@@ -417,6 +448,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
         @Override
         protected void channelRead0(ChannelHandlerContext ctx, RemotingCommand msg) throws Exception {
+            //调用processMessageReceived来处理接受到的消息
             processMessageReceived(ctx, msg);
         }
     }
@@ -489,5 +521,27 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
             RemotingUtil.closeChannel(ctx.channel());
         }
+    }
+
+
+    public static void main(String[] args) {
+        NettyServerConfig config = new NettyServerConfig();
+        config.setListenPort(8899);
+        NettyRemotingServer server = new NettyRemotingServer(config);
+
+        server.registerDefaultProcessor(new NettyRequestProcessor() {
+            @Override
+            public RemotingCommand processRequest(ChannelHandlerContext ctx, RemotingCommand request) throws Exception {
+                System.out.println("收到");
+                return null;
+            }
+
+            @Override
+            public boolean rejectRequest() {
+                return false;
+            }
+        }, Executors.newSingleThreadExecutor());
+
+        server.start();
     }
 }

@@ -44,7 +44,9 @@ import org.slf4j.LoggerFactory;
 public class NamesrvStartup {
 
     private static InternalLogger log;
+    // 用于保存、读取配置文件
     private static Properties properties = null;
+    // 解析命令行
     private static CommandLine commandLine = null;
 
     public static void main(String[] args) {
@@ -54,7 +56,9 @@ public class NamesrvStartup {
     public static NamesrvController main0(String[] args) {
 
         try {
+            //            源码解析之创建namesrv控制器 =》
             NamesrvController controller = createNamesrvController(args);
+            //            源码解析之启动namesrv控制器 =》
             start(controller);
             String tip = "The Name Server boot success. serializeType=" + RemotingCommand.getSerializeTypeConfigInThisServer();
             log.info(tip);
@@ -69,19 +73,30 @@ public class NamesrvStartup {
     }
 
     public static NamesrvController createNamesrvController(String[] args) throws IOException, JoranException {
+        //        从系统文件中查询rocketmq版本
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
         //PackageConflictDetect.detectFastjson();
 
+        //        构建命令行操作的指令 =》
         Options options = ServerUtil.buildCommandlineOptions(new Options());
+        //        mqnamesrv 启动namesrv命令 =》
         commandLine = ServerUtil.parseCmdLine("mqnamesrv", args, buildCommandlineOptions(options), new PosixParser());
         if (null == commandLine) {
+            //            系统非正常退出，流程结束
             System.exit(-1);
             return null;
         }
 
+        //        解析配置文件 =》
         final NamesrvConfig namesrvConfig = new NamesrvConfig();
         final NettyServerConfig nettyServerConfig = new NettyServerConfig();
+        //        设置 namesrv的服务端口
         nettyServerConfig.setListenPort(9876);
+
+        /*
+         * 如果命令带有-c参数，则读取文件内容，转换成全局Properties
+         * 通过反射，将Properties中的值赋值给NamesrvConfig、NettyServerConfig
+         */
         if (commandLine.hasOption('c')) {
             String file = commandLine.getOptionValue('c');
             if (file != null) {
@@ -98,6 +113,7 @@ public class NamesrvStartup {
             }
         }
 
+        // 如果命令带有-p参数，则打印出NamesrvConfig、NettyServerConfig的属性
         if (commandLine.hasOption('p')) {
             InternalLogger console = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_CONSOLE_NAME);
             MixAll.printObjectProperties(console, namesrvConfig);
@@ -105,13 +121,25 @@ public class NamesrvStartup {
             System.exit(0);
         }
 
+        /*
+         * 解析命令行参数，并加载到namesrvConfig配置中
+         * 通过debug发现，这一行在这里没用
+         * commandLine2Properties()方法中将参数全名和属性值转换成Properties
+         * 目前支持的参数的全名为configFile、help、namesrvAddr、printConfigItem
+         * 但是NamesrvConfig类中没有与之对应的set方法，所以不知道意义何在
+         */
         MixAll.properties2Object(ServerUtil.commandLine2Properties(commandLine), namesrvConfig);
 
+        // 判断ROCKETMQ_HOME不能为空
         if (null == namesrvConfig.getRocketmqHome()) {
             System.out.printf("Please set the %s variable in your environment to match the location of the RocketMQ installation%n", MixAll.ROCKETMQ_HOME_ENV);
             System.exit(-2);
         }
 
+        /*
+         * 初始化Logback日志工厂
+         * RocketMQ默认使用Logback作为日志输出
+         */
         LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
         JoranConfigurator configurator = new JoranConfigurator();
         configurator.setContext(lc);
@@ -123,9 +151,15 @@ public class NamesrvStartup {
         MixAll.printObjectProperties(log, namesrvConfig);
         MixAll.printObjectProperties(log, nettyServerConfig);
 
+        /*
+         * 初始化NamesrvController
+         * 该类是Name Server的主要控制类
+         */
         final NamesrvController controller = new NamesrvController(namesrvConfig, nettyServerConfig);
 
         // remember all configs to prevent discard
+        // 将全局Properties的内容复制到NamesrvController.Configuration.allConfigs中
+
         controller.getConfiguration().registerConfig(properties);
 
         return controller;

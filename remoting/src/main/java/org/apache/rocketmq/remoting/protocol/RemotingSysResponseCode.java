@@ -17,6 +17,9 @@
 
 package org.apache.rocketmq.remoting.protocol;
 
+/**
+ * 同步响应的结果编码，结果状态编码
+ */
 public class RemotingSysResponseCode {
 
     public static final int SUCCESS = 0;

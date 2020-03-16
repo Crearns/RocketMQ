@@ -101,7 +101,12 @@ public class Configuration {
         try {
             readWriteLock.writeLock().lockInterruptibly();
 
+            /**
+             * 通过反射将Config对象转为Properties
+             * Property的 k,v -> 对象的变量名,变量的值
+             */
             try {
+                // 将registerProps中的元素merge到成员变量allConfigs中
                 merge(extProperties, this.allConfigs);
             } finally {
                 readWriteLock.writeLock().unlock();
