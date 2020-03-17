@@ -31,7 +31,7 @@ public class QueueData implements Comparable<QueueData> {
     private int perm;
     /**
      * 该字段对应TopicConfig.topicSysFlag
-     * 由创建Topic时-u/-s参数指定，不知道有何作用
+     * 由创建Topic时-u/-s参数指定，用来标记unit topic
      * 参照：https://github.com/alibaba/RocketMQ/issues/206
      */
     private int topicSynFlag;

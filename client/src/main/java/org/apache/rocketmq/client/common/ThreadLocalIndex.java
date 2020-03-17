@@ -19,6 +19,8 @@ package org.apache.rocketmq.client.common;
 
 import java.util.Random;
 
+// 通过ThreadLocal，赋予每个线程一个随机值，后面会根据这个随机值通过和messageQueueList的length取余运算
+// 选取一个MessageQueue ，进而选取一条真正的消息队列进行消息发送
 public class ThreadLocalIndex {
     private final ThreadLocal<Integer> threadLocalIndex = new ThreadLocal<Integer>();
     private final Random random = new Random();

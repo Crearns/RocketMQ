@@ -106,7 +106,7 @@ public class RouteInfoManager {
         return topicList.encode();
     }
 
-    // TODO: queuedata
+    // TODO: dataversion
     public RegisterBrokerResult registerBroker(
         final String clusterName,
         final String brokerAddr,

@@ -92,9 +92,12 @@ public class MQClientInstance {
     private final int instanceIndex;
     private final String clientId;
     private final long bootTimestamp = System.currentTimeMillis();
+    // 根据group 找到producer缓存
     private final ConcurrentMap<String/* group */, MQProducerInner> producerTable = new ConcurrentHashMap<String, MQProducerInner>();
+    // 根据group 找到consumer缓存
     private final ConcurrentMap<String/* group */, MQConsumerInner> consumerTable = new ConcurrentHashMap<String, MQConsumerInner>();
     private final ConcurrentMap<String/* group */, MQAdminExtInner> adminExtTable = new ConcurrentHashMap<String, MQAdminExtInner>();
+
     private final NettyClientConfig nettyClientConfig;
     private final MQClientAPIImpl mQClientAPIImpl;
     private final MQAdminImpl mQAdminImpl;
@@ -134,6 +137,8 @@ public class MQClientInstance {
         this.clientRemotingProcessor = new ClientRemotingProcessor(this);
         this.mQClientAPIImpl = new MQClientAPIImpl(this.nettyClientConfig, this.clientRemotingProcessor, rpcHook, clientConfig);
 
+//        根据clientConfig的getNamesrvAddr判断是否设置了namesrvAddr名称服务地址，
+//        若是设置了，需要通过mQClientAPIImpl的updateNameServerAddressList方法，完成对名称服务地址的更新
         if (this.clientConfig.getNamesrvAddr() != null) {
             this.mQClientAPIImpl.updateNameServerAddressList(this.clientConfig.getNamesrvAddr());
             log.info("user specified name server address: {}", this.clientConfig.getNamesrvAddr());
@@ -237,9 +242,9 @@ public class MQClientInstance {
                     this.mQClientAPIImpl.start();
                     // Start various schedule tasks
                     this.startScheduledTask();
-                    // Start pull service
+                    // Start pull service 开启pullMessageService服务，为消费者拉取消息 todo consumer
                     this.pullMessageService.start();
-                    // Start rebalance service
+                    // Start rebalance service 开启rebalanceService服务，用来均衡消息队列 todo consumer
                     this.rebalanceService.start();
                     // Start push service
                     this.defaultMQProducer.getDefaultMQProducerImpl().start(false);
@@ -259,6 +264,7 @@ public class MQClientInstance {
     }
 
     private void startScheduledTask() {
+        // ①若是名称服务地址namesrvAddr不存在，则调用前面的fetchNameServerAddr方法，定时更新名称服务
         if (null == this.clientConfig.getNamesrvAddr()) {
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
@@ -273,6 +279,7 @@ public class MQClientInstance {
             }, 1000 * 10, 1000 * 60 * 2, TimeUnit.MILLISECONDS);
         }
 
+        // ②通过updateTopicRouteInfoFromNameServer方法定时更新Topic所对应的路由信息 30s
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -285,6 +292,7 @@ public class MQClientInstance {
             }
         }, 10, this.clientConfig.getPollNameServerInterval(), TimeUnit.MILLISECONDS);
 
+        // ③定时清除离线的Broker，以及向当前在线的Broker发送心跳包
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -298,6 +306,7 @@ public class MQClientInstance {
             }
         }, 1000, this.clientConfig.getHeartbeatBrokerInterval(), TimeUnit.MILLISECONDS);
 
+        // ④定时持久化消费者队列的消费进度
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -310,6 +319,7 @@ public class MQClientInstance {
             }
         }, 1000 * 10, this.clientConfig.getPersistConsumerOffsetInterval(), TimeUnit.MILLISECONDS);
 
+        // ⑤定时调整消费者端的线程池的大小 todo consumer
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -629,6 +639,9 @@ public class MQClientInstance {
                     }
                     if (topicRouteData != null) {
                         TopicRouteData old = this.topicRouteTable.get(topic);
+                        // topic路由更新
+                        // 分别对所有的消费者和生产者进行检查是否有需要更新有关该Topic的路由信息
+                        //
                         boolean changed = topicRouteDataIsChange(old, topicRouteData);
                         if (!changed) {
                             changed = this.isNeedUpdateTopicRouteInfo(topic);
@@ -802,6 +815,9 @@ public class MQClientInstance {
     }
 
     private boolean isNeedUpdateTopicRouteInfo(final String topic) {
+        // 当存在需要跟新的情况时，在updateTopicRouteInfoFromNameServer中
+        // 首先从topicRouteData中取出BrokerData，即Broker的路由信息，进行更新
+        // 再根据topicRouteData从中获取消费者生产者的消息路由信息，分别进行更新
         boolean result = false;
         {
             Iterator<Entry<String, MQProducerInner>> it = this.producerTable.entrySet().iterator();

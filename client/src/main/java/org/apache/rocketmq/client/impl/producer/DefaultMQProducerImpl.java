@@ -91,6 +91,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     private final InternalLogger log = ClientLogger.getLog();
     private final Random random = new Random();
     private final DefaultMQProducer defaultMQProducer;
+    // topic到消息队列的映射
     private final ConcurrentMap<String/* topic */, TopicPublishInfo> topicPublishInfoTable =
         new ConcurrentHashMap<String, TopicPublishInfo>();
     private final ArrayList<SendMessageHook> sendMessageHookList = new ArrayList<SendMessageHook>();
@@ -117,6 +118,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         this.rpcHook = rpcHook;
 
         this.asyncSenderThreadPoolQueue = new LinkedBlockingQueue<Runnable>(50000);
+        // 处理异步消息的发送
         this.defaultAsyncSenderExecutor = new ThreadPoolExecutor(
             Runtime.getRuntime().availableProcessors(),
             Runtime.getRuntime().availableProcessors(),
@@ -171,7 +173,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
     public void start(final boolean startFactory) throws MQClientException {
         switch (this.serviceState) {
-            case CREATE_JUST:
+            case CREATE_JUST: //只有当是CREATE_JUST状态时正常执行，防止在其他状态下错误调用start
                 this.serviceState = ServiceState.START_FAILED;
 
                 this.checkConfig();
@@ -190,6 +192,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         null);
                 }
 
+                //向topicPublishInfoTable中添加一条键值为createTopicKey（"TBW102"）的TopicPublishInfo记录
                 this.topicPublishInfoTable.put(this.defaultMQProducer.getCreateTopicKey(), new TopicPublishInfo());
 
                 if (startFactory) {
@@ -211,10 +214,13 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 break;
         }
 
+        // 给所有Broker发送一次心跳包
         this.mQClientFactory.sendHeartbeatToAllBrokerWithLock();
     }
 
     private void checkConfig() throws MQClientException {
+        //ProducerGroup命名检查
+        //主要是检查命名的合法性，以及防止和默认的producerGroup生产者组名DEFAULT_PRODUCER_GROUP产生冲突
         Validators.checkGroup(this.defaultMQProducer.getProducerGroup());
 
         if (null == this.defaultMQProducer.getProducerGroup()) {

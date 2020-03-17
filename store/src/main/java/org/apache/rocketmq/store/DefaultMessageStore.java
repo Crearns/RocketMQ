@@ -117,19 +117,26 @@ public class DefaultMessageStore implements MessageStore {
         this.brokerConfig = brokerConfig;
         this.messageStoreConfig = messageStoreConfig;
         this.brokerStatsManager = brokerStatsManager;
+        // 请求定位服务
         this.allocateMappedFileService = new AllocateMappedFileService(this);
+        // 存储服务
         if (messageStoreConfig.isEnableDLegerCommitLog()) {
             this.commitLog = new DLedgerCommitLog(this);
         } else {
             this.commitLog = new CommitLog(this);
         }
+        // 消费队列信息
         this.consumeQueueTable = new ConcurrentHashMap<>(32);
-
+        // 刷新队列服务
         this.flushConsumeQueueService = new FlushConsumeQueueService();
+        // 清除CommitLog数据服务
         this.cleanCommitLogService = new CleanCommitLogService();
+        // 清除消费队列服务
         this.cleanConsumeQueueService = new CleanConsumeQueueService();
         this.storeStatsService = new StoreStatsService();
+        // 索引服务
         this.indexService = new IndexService(this);
+        // HA服务，主从复制 高可用
         if (!messageStoreConfig.isEnableDLegerCommitLog()) {
             this.haService = new HAService(this);
         } else {

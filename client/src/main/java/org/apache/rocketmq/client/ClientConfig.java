@@ -31,9 +31,12 @@ import org.apache.rocketmq.remoting.protocol.LanguageCode;
  * Client Common configuration
  */
 public class ClientConfig {
+//    决定是否使用VIP通道，即高优先级
     public static final String SEND_MESSAGE_WITH_VIP_CHANNEL_PROPERTY = "com.rocketmq.sendMessageWithVIPChannel";
     private String namesrvAddr = NameServerAddressUtils.getNameServerAddresses();
+//    Producer端的本地IP
     private String clientIP = RemotingUtil.getLocalAddress();
+//    Producer的实例名称
     private String instanceName = System.getProperty("rocketmq.client.name", "DEFAULT");
     private int clientCallbackExecutorThreads = Runtime.getRuntime().availableProcessors();
     protected String namespace;
@@ -41,10 +44,12 @@ public class ClientConfig {
 
     /**
      * Pulling topic information interval from the named server
+     * 轮询NameServer的时间间隔
      */
     private int pollNameServerInterval = 1000 * 30;
     /**
      * Heartbeat interval in microseconds with message broker
+     * 向Broker发送心跳包的时间间隔
      */
     private int heartbeatBrokerInterval = 1000 * 30;
     /**
