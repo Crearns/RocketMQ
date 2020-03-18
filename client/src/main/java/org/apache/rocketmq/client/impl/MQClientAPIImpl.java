@@ -420,6 +420,7 @@ public class MQClientAPIImpl {
     ) throws RemotingException, MQBrokerException, InterruptedException {
         long beginStartTime = System.currentTimeMillis();
         RemotingCommand request = null;
+        // V2性能更高 因为字段名变 abcdefg  太丧心病狂了。。
         if (sendSmartMsg || msg instanceof MessageBatch) {
             SendMessageRequestHeaderV2 requestHeaderV2 = SendMessageRequestHeaderV2.createSendMessageRequestHeaderV2(requestHeader);
             request = RemotingCommand.createRequestCommand(msg instanceof MessageBatch ? RequestCode.SEND_BATCH_MESSAGE : RequestCode.SEND_MESSAGE_V2, requestHeaderV2);
@@ -431,9 +432,11 @@ public class MQClientAPIImpl {
 
         switch (communicationMode) {
             case ONEWAY:
+                // 发送单程信息
                 this.remotingClient.invokeOneway(addr, request, timeoutMillis);
                 return null;
             case ASYNC:
+                // 异步
                 final AtomicInteger times = new AtomicInteger();
                 long costTimeAsync = System.currentTimeMillis() - beginStartTime;
                 if (timeoutMillis < costTimeAsync) {
@@ -443,6 +446,7 @@ public class MQClientAPIImpl {
                     retryTimesWhenSendFailed, times, context, producer);
                 return null;
             case SYNC:
+                // 同步
                 long costTimeSync = System.currentTimeMillis() - beginStartTime;
                 if (timeoutMillis < costTimeSync) {
                     throw new RemotingTooMuchRequestException("sendMessage call timeout");
@@ -605,8 +609,11 @@ public class MQClientAPIImpl {
         final RemotingCommand response
     ) throws MQBrokerException, RemotingCommandException {
         switch (response.getCode()) {
+            // 刷新磁盘超时
             case ResponseCode.FLUSH_DISK_TIMEOUT:
+            // 主从同步超时
             case ResponseCode.FLUSH_SLAVE_TIMEOUT:
+            // 从节点不可用
             case ResponseCode.SLAVE_NOT_AVAILABLE: {
             }
             case ResponseCode.SUCCESS: {
@@ -2229,4 +2236,5 @@ public class MQClientAPIImpl {
                 return false;
         }
     }
+
 }

@@ -50,6 +50,7 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
 
     @Override
     public boolean isAvailable(final String name) {
+//        如果faultItem 中不存在该broker，返回true，当存在时，还需判断isAvailable
         final FaultItem faultItem = this.faultItemTable.get(name);
         if (faultItem != null) {
             return faultItem.isAvailable();
@@ -131,6 +132,7 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
         }
 
         public boolean isAvailable() {
+//            如果延迟时间已过也返回true。
             return (System.currentTimeMillis() - startTimestamp) >= 0;
         }
 
