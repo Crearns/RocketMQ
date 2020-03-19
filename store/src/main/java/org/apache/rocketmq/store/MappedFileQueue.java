@@ -145,6 +145,7 @@ public class MappedFileQueue {
     }
 
     public boolean load() {
+        // 存储路径
         File dir = new File(this.storePath);
         File[] files = dir.listFiles();
         if (files != null) {
@@ -152,6 +153,7 @@ public class MappedFileQueue {
             Arrays.sort(files);
             for (File file : files) {
 
+                // 如果文件长度不符
                 if (file.length() != this.mappedFileSize) {
                     log.warn(file + "\t" + file.length()
                         + " length not matched message store config value, please check it manually");
@@ -159,6 +161,7 @@ public class MappedFileQueue {
                 }
 
                 try {
+                    // 通过内存映射 MARK  加载到内存中
                     MappedFile mappedFile = new MappedFile(file.getPath(), mappedFileSize);
 
                     mappedFile.setWrotePosition(this.mappedFileSize);

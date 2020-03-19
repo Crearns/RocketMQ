@@ -732,7 +732,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             byte[] prevBody = msg.getBody();
             try {
                 //for MessageBatch,ID has been set in the generating process
-                // 如果是单条消息（即不是批量发送），给消息设置独特id
+                // 如果是单条消息（即不是批量发送），给消息设置独特id，id主要有PID、IP地址，ClassLoader的HashCode、时间戳组成
                 if (!(msg instanceof MessageBatch)) {
                     MessageClientIDSetter.setUniqID(msg);
                 }

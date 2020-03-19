@@ -76,6 +76,7 @@ public class DefaultMessageStore implements MessageStore {
 
     private final IndexService indexService;
 
+    // 请求定位服务
     private final AllocateMappedFileService allocateMappedFileService;
 
     private final ReputMessageService reputMessageService;
@@ -119,7 +120,7 @@ public class DefaultMessageStore implements MessageStore {
         this.brokerStatsManager = brokerStatsManager;
         // 请求定位服务
         this.allocateMappedFileService = new AllocateMappedFileService(this);
-        // 存储服务
+        // 存储服务 是否使用DLeger高可用，在DLeger高可用中，将DLeger本身的commitLog与RocketMQ的log结合
         if (messageStoreConfig.isEnableDLegerCommitLog()) {
             this.commitLog = new DLedgerCommitLog(this);
         } else {
@@ -136,7 +137,7 @@ public class DefaultMessageStore implements MessageStore {
         this.storeStatsService = new StoreStatsService();
         // 索引服务
         this.indexService = new IndexService(this);
-        // HA服务，主从复制 高可用
+        // HA服务，主从复制 高可用 todo DLeger
         if (!messageStoreConfig.isEnableDLegerCommitLog()) {
             this.haService = new HAService(this);
         } else {
@@ -189,18 +190,21 @@ public class DefaultMessageStore implements MessageStore {
                 result = result && this.scheduleMessageService.load();
             }
 
-            // load Commit Log
+            // load Commit Log 加载 commit log
             result = result && this.commitLog.load();
 
-            // load Consume Queue
+            // load Consume Queue 加载消费队列
             result = result && this.loadConsumeQueue();
 
+            // todo 深入分析
             if (result) {
                 this.storeCheckpoint =
                     new StoreCheckpoint(StorePathConfigHelper.getStoreCheckpoint(this.messageStoreConfig.getStorePathRootDir()));
 
+                // 索引服务
                 this.indexService.load(lastExitOK);
 
+                // 恢复数据
                 this.recover(lastExitOK);
 
                 log.info("load over, and the max phy offset = {}", this.getMaxPhyOffset());
@@ -1296,6 +1300,7 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     private boolean loadConsumeQueue() {
+        // 得到队列文件夹
         File dirLogic = new File(StorePathConfigHelper.getStorePathConsumeQueue(this.messageStoreConfig.getStorePathRootDir()));
         File[] fileTopicList = dirLogic.listFiles();
         if (fileTopicList != null) {
@@ -1308,10 +1313,12 @@ public class DefaultMessageStore implements MessageStore {
                     for (File fileQueueId : fileQueueIdList) {
                         int queueId;
                         try {
+                            // 队列名 queueid？
                             queueId = Integer.parseInt(fileQueueId.getName());
                         } catch (NumberFormatException e) {
                             continue;
                         }
+                        // 测试路径： $home/store/consumequeue/TopicTest/${queueId}/${offset}
                         ConsumeQueue logic = new ConsumeQueue(
                             topic,
                             queueId,
@@ -1319,6 +1326,7 @@ public class DefaultMessageStore implements MessageStore {
                             this.getMessageStoreConfig().getMappedFileSizeConsumeQueue(),
                             this);
                         this.putConsumeQueue(topic, queueId, logic);
+                        // 加载到内存中
                         if (!logic.load()) {
                             return false;
                         }

@@ -80,7 +80,7 @@ public class MQFaultStrategy {
                             return mq;
                     }
                 }
-                // 如果一个没能获取MQ
+                // 如果一个没能获取MQ，则在latencyFaultTolerance取一个
                 final String notBestBroker = latencyFaultTolerance.pickOneAtLeast();
                 int writeQueueNums = tpInfo.getQueueIdByBroker(notBestBroker);
                 if (writeQueueNums > 0) {

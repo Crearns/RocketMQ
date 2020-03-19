@@ -246,9 +246,11 @@ public class BrokerController {
 
         if (result) {
             try {
+                // 创建messageStore
                 this.messageStore =
                     new DefaultMessageStore(this.messageStoreConfig, this.brokerStatsManager, this.messageArrivingListener,
                         this.brokerConfig);
+                // DLeger 进行高可用
                 if (messageStoreConfig.isEnableDLegerCommitLog()) {
                     DLedgerRoleChangeHandler roleChangeHandler = new DLedgerRoleChangeHandler(this, (DefaultMessageStore) messageStore);
                     ((DLedgerCommitLog)((DefaultMessageStore) messageStore).getCommitLog()).getdLedgerServer().getdLedgerLeaderElector().addRoleChangeHandler(roleChangeHandler);
@@ -264,7 +266,7 @@ public class BrokerController {
             }
         }
 
-        //从消息存储中加载=》
+        //从消息存储中加载=》  血妈难
         result = result && this.messageStore.load();
 
         if (result) {
@@ -276,6 +278,9 @@ public class BrokerController {
             fastConfig.setListenPort(nettyServerConfig.getListenPort() - 2);
             // netty server
             this.fastRemotingServer = new NettyRemotingServer(fastConfig, this.clientHousekeepingService);
+            /*
+             * ******************以下为线程池定义，用于broker不同服务******************
+             */
             // 发送消息线程池
             this.sendMessageExecutor = new BrokerFixedThreadPoolExecutor(
                 this.brokerConfig.getSendMessageThreadPoolNums(),
@@ -306,7 +311,7 @@ public class BrokerController {
                 Executors.newFixedThreadPool(this.brokerConfig.getAdminBrokerThreadPoolNums(), new ThreadFactoryImpl(
                     "AdminBrokerThread_"));
 
-            // 客户端消息线程池 todo:?
+            // 客户端管理线程池
             this.clientManageExecutor = new ThreadPoolExecutor(
                 this.brokerConfig.getClientManageThreadPoolNums(),
                 this.brokerConfig.getClientManageThreadPoolNums(),
@@ -342,6 +347,7 @@ public class BrokerController {
             this.registerProcessor();
 
 
+            // 计算离明天早上0点的时间，意思就是以下操作都在0点开始重复运行
             final long initialDelay = UtilAll.computeNextMorningTimeMillis() - System.currentTimeMillis();
             // 一天时间
             final long period = 1000 * 60 * 60 * 24;
@@ -349,7 +355,7 @@ public class BrokerController {
                 @Override
                 public void run() {
                     try {
-                        // 定时打印Broker的状态
+                        // 每天打印Broker的状态
                         BrokerController.this.getBrokerStats().record();
                     } catch (Throwable e) {
                         log.error("schedule record error.", e);
@@ -362,6 +368,7 @@ public class BrokerController {
                 public void run() {
                     try {
                         // FlushConsumerOffset 定时向consumerOffset.json文件中写入消费者偏移量
+                        // 10秒后开始 默认5秒刷新一次
                         BrokerController.this.consumerOffsetManager.persist();
                     } catch (Throwable e) {
                         log.error("schedule persist consumerOffset error.", e);
@@ -397,7 +404,7 @@ public class BrokerController {
                 @Override
                 public void run() {
                     try {
-                        // 定时打印Send、Pull、Query、Transaction队列信息
+                        // 每1秒定时打印Send、Pull、Query、Transaction队列信息
                         BrokerController.this.printWaterMark();
                     } catch (Throwable e) {
                         log.error("printWaterMark error.", e);
@@ -418,11 +425,12 @@ public class BrokerController {
                 }
             }, 1000 * 10, 1000 * 60, TimeUnit.MILLISECONDS);
 
-            // 如果没有namesrv的地址每两分钟刷新获取namesrv地址
+            // 若是设置了NamesrvAddr，需要通过updateNameServerAddressList完成一次NameServer地址的跟新
             if (this.brokerConfig.getNamesrvAddr() != null) {
                 this.brokerOuterAPI.updateNameServerAddressList(this.brokerConfig.getNamesrvAddr());
                 log.info("Set user specified name server address: {}", this.brokerConfig.getNamesrvAddr());
             } else if (this.brokerConfig.isFetchNamesrvAddrByAddressServer()) {
+                // 若是设置了NamesrvAddr，并且设置了fetchNamesrvAddrByAddressServer属性（默认关闭），需要定时获取更新NameServer地址（fetchNameServerAddr方法在之前博客也介绍过）
                 this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
                     @Override
@@ -437,19 +445,26 @@ public class BrokerController {
             }
 
 
+            // 没有采用DLeger实现高可用 即采用主从复制实现高可用
             if (!messageStoreConfig.isEnableDLegerCommitLog()) {
+                // 如果当前是从节点 则需要检查是否设置了HA的Master地址
                 if (BrokerRole.SLAVE == this.messageStoreConfig.getBrokerRole()) {
+                    // 获得主节点地址
                     if (this.messageStoreConfig.getHaMasterAddress() != null && this.messageStoreConfig.getHaMasterAddress().length() >= 6) {
+                        // 若设置了Master地址要通过updateHaMasterAddress方法向更新Master地址
                         this.messageStore.updateHaMasterAddress(this.messageStoreConfig.getHaMasterAddress());
                         this.updateMasterHAServerAddrPeriodically = false;
                     } else {
+                        // 若没有设置需要更改updateMasterHAServerAddrPeriodically为true，在后面会有用
                         this.updateMasterHAServerAddrPeriodically = true;
                     }
                 } else {
+                    // 若是MASTER，则需要定时打印slave落后的字节数
                     this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                         @Override
                         public void run() {
                             try {
+                                // todo
                                 BrokerController.this.printMasterAndSlaveDiff();
                             } catch (Throwable e) {
                                 log.error("schedule printMasterAndSlaveDiff error.", e);
@@ -499,14 +514,22 @@ public class BrokerController {
                     log.warn("FileWatchService created error, can't load the certificate dynamically");
                 }
             }
+            // 初始化事务 todo 事务相关
             initialTransaction();
+            // 初始化ACL
             initialAcl();
+            // 初始化RPC钩子方法
             initialRpcHooks();
         }
         return result;
     }
 
     private void initialTransaction() {
+        //这里动态加载了TransactionalMessageService和AbstractTransactionalMessageCheckListener的实现类，位于如下
+        //"META-INF/service/org.apache.rocketmq.broker.transaction.TransactionalMessageService"
+        //"META-INF/service/org.apache.rocketmq.broker.transaction.AbstractTransactionalMessageCheckListener"
+        //还创建了TransactionalMessageCheckService
+        // todo 这些类有啥用 事务相关到后面深入分析
         this.transactionalMessageService = ServiceProvider.loadClass(ServiceProvider.TRANSACTION_SERVICE_ID, TransactionalMessageService.class);
         if (null == this.transactionalMessageService) {
             this.transactionalMessageService = new TransactionalMessageServiceImpl(new TransactionalMessageBridge(this, this.getMessageStore()));
@@ -566,7 +589,7 @@ public class BrokerController {
     public void registerProcessor() {
         /**
          * SendMessageProcessor
-         * todo:
+         * todo: SendMessageProcessor 后续深入分析
          */
         SendMessageProcessor sendProcessor = new SendMessageProcessor(this);
         sendProcessor.registerSendMessageHook(sendMessageHookList);
@@ -854,6 +877,7 @@ public class BrokerController {
         return this.brokerConfig.getBrokerIP1() + ":" + this.nettyServerConfig.getListenPort();
     }
 
+    // 启动各项服务
     public void start() throws Exception {
         if (this.messageStore != null) {
             this.messageStore.start();

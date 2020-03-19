@@ -118,6 +118,7 @@ public class BrokerStartup {
             final NettyClientConfig nettyClientConfig = new NettyClientConfig();
 
 
+            // TLS
             nettyClientConfig.setUseTLS(Boolean.parseBoolean(System.getProperty(TLS_ENABLE,
                 String.valueOf(TlsSystemConfig.tlsMode == TlsMode.ENFORCING))));
 
@@ -196,7 +197,7 @@ public class BrokerStartup {
                     break;
             }
 
-            // ha broker监听端口 10912
+            // ha broker监听端口 10912  高可用监听端口
             messageStoreConfig.setHaListenPort(nettyServerConfig.getListenPort() + 1);
             LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
             JoranConfigurator configurator = new JoranConfigurator();
@@ -238,6 +239,7 @@ public class BrokerStartup {
 
             // Broker初始化
             boolean initResult = controller.initialize();
+            // 初始化失败 退出
             if (!initResult) {
                 controller.shutdown();
                 System.exit(-3);

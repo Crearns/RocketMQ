@@ -62,8 +62,11 @@ public class IndexService {
             Arrays.sort(files);
             for (File file : files) {
                 try {
+                    // 创建索引映射文件
                     IndexFile f = new IndexFile(file.getPath(), this.hashSlotNum, this.indexNum, 0, 0);
+                    // todo：深入分析
                     f.load();
+
 
                     if (!lastExitOK) {
                         if (f.getEndTimestamp() > this.defaultMessageStore.getStoreCheckpoint()

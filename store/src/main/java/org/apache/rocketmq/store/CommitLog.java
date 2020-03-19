@@ -155,7 +155,8 @@ public class CommitLog {
         return null;
     }
 
-    /**
+    /**'
+     * 正常关闭，所有内存数据都会刷盘
      * When the normal exit, data recovery, all memory data have been flush
      */
     public void recoverNormally(long maxPhyOffsetOfConsumeQueue) {

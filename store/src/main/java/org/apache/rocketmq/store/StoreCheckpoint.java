@@ -38,13 +38,19 @@ public class StoreCheckpoint {
 
     public StoreCheckpoint(final String scpPath) throws IOException {
         File file = new File(scpPath);
+        // 确保父文件夹存在
         MappedFile.ensureDirOK(file.getParent());
+        // 文件存在
         boolean fileExists = file.exists();
 
+        // 访问文件 读/写
         this.randomAccessFile = new RandomAccessFile(file, "rw");
+        // 文件通道
         this.fileChannel = this.randomAccessFile.getChannel();
+        // 内存映射文件
         this.mappedByteBuffer = fileChannel.map(MapMode.READ_WRITE, 0, MappedFile.OS_PAGE_SIZE);
 
+        //如果文件存在
         if (fileExists) {
             log.info("store checkpoint file exists, " + scpPath);
             this.physicMsgTimestamp = this.mappedByteBuffer.getLong(0);

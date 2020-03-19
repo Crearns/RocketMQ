@@ -73,14 +73,19 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
         }
 
         if (!tmpList.isEmpty()) {
+            // 打乱
             Collections.shuffle(tmpList);
 
+            // 排序
             Collections.sort(tmpList);
 
+            // 取中间
             final int half = tmpList.size() / 2;
+            // 如果half不大于0，取0
             if (half <= 0) {
                 return tmpList.get(0).getName();
             } else {
+                // 否则取随机数并对half取模
                 final int i = this.whichItemWorst.getAndIncrement() % half;
                 return tmpList.get(i).getName();
             }

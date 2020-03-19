@@ -493,20 +493,25 @@ public class MQClientAPIImpl {
                 if (null == sendCallback && response != null) {
 
                     try {
+                        // 如果没有callback并且得到response
                         SendResult sendResult = MQClientAPIImpl.this.processSendResponse(brokerName, msg, response);
                         if (context != null && sendResult != null) {
+                            // 设置result
                             context.setSendResult(sendResult);
+                            // 执行钩子
                             context.getProducer().executeSendMessageHookAfter(context);
                         }
                     } catch (Throwable e) {
                     }
 
+                    // 更新延迟容错对象
                     producer.updateFaultItem(brokerName, System.currentTimeMillis() - responseFuture.getBeginTimestamp(), false);
                     return;
                 }
 
                 if (response != null) {
                     try {
+                        // 获得Result
                         SendResult sendResult = MQClientAPIImpl.this.processSendResponse(brokerName, msg, response);
                         assert sendResult != null;
                         if (context != null) {
@@ -515,17 +520,20 @@ public class MQClientAPIImpl {
                         }
 
                         try {
+                            // 执行回调方法
                             sendCallback.onSuccess(sendResult);
                         } catch (Throwable e) {
                         }
-
+                        // 更新延迟容错对象
                         producer.updateFaultItem(brokerName, System.currentTimeMillis() - responseFuture.getBeginTimestamp(), false);
                     } catch (Exception e) {
+                        // 此时不需要重发因为已经发送了，只需要更新延迟容错对象然后执行回调方法
                         producer.updateFaultItem(brokerName, System.currentTimeMillis() - responseFuture.getBeginTimestamp(), true);
                         onExceptionImpl(brokerName, msg, 0L, request, sendCallback, topicPublishInfo, instance,
                             retryTimesWhenSendFailed, times, e, context, false, producer);
                     }
                 } else {
+                    // 如果没有response则说明没有发送成功，有可能是发送请求或者发送响应的时候出现问题，需要重发，有可能会出现重复发送？
                     producer.updateFaultItem(brokerName, System.currentTimeMillis() - responseFuture.getBeginTimestamp(), true);
                     if (!responseFuture.isSendRequestOK()) {
                         MQClientException ex = new MQClientException("send request failed", responseFuture.getCause());
@@ -561,7 +569,9 @@ public class MQClientAPIImpl {
         final DefaultMQProducerImpl producer
     ) {
         int tmp = curTimes.incrementAndGet();
+        // 如果需要重发，执行重发机制
         if (needRetry && tmp <= timesTotal) {
+            // 进行重发机制
             String retryBrokerName = brokerName;//by default, it will send to the same broker
             if (topicPublishInfo != null) { //select one message queue accordingly, in order to determine which broker to send
                 MessageQueue mqChosen = producer.selectOneMessageQueue(topicPublishInfo, brokerName);
@@ -597,6 +607,7 @@ public class MQClientAPIImpl {
             }
 
             try {
+                // 执行错误回调
                 sendCallback.onException(e);
             } catch (Exception ignored) {
             }
@@ -636,6 +647,7 @@ public class MQClientAPIImpl {
                         break;
                 }
 
+                // 反射得到SendMessageResponseHeader
                 SendMessageResponseHeader responseHeader =
                     (SendMessageResponseHeader) response.decodeCommandCustomHeader(SendMessageResponseHeader.class);
 
@@ -648,22 +660,29 @@ public class MQClientAPIImpl {
                 MessageQueue messageQueue = new MessageQueue(topic, brokerName, responseHeader.getQueueId());
 
                 String uniqMsgId = MessageClientIDSetter.getUniqID(msg);
+                // 如果是批量发送
                 if (msg instanceof MessageBatch) {
                     StringBuilder sb = new StringBuilder();
                     for (Message message : (MessageBatch) msg) {
+                        // uniqID
                         sb.append(sb.length() == 0 ? "" : ",").append(MessageClientIDSetter.getUniqID(message));
                     }
                     uniqMsgId = sb.toString();
                 }
+                // 创建Result对象
                 SendResult sendResult = new SendResult(sendStatus,
                     uniqMsgId,
                     responseHeader.getMsgId(), messageQueue, responseHeader.getQueueOffset());
+                // 设置事务ID
                 sendResult.setTransactionId(responseHeader.getTransactionId());
+                // 得到regionId
                 String regionId = response.getExtFields().get(MessageConst.PROPERTY_MSG_REGION);
+                // 得到trace on
                 String traceOn = response.getExtFields().get(MessageConst.PROPERTY_TRACE_SWITCH);
                 if (regionId == null || regionId.isEmpty()) {
                     regionId = MixAll.DEFAULT_TRACE_REGION_ID;
                 }
+                // todo：traceOn字段的用途
                 if (traceOn != null && traceOn.equals("false")) {
                     sendResult.setTraceOn(false);
                 } else {
