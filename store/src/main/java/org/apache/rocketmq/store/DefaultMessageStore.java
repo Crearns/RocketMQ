@@ -226,28 +226,42 @@ public class DefaultMessageStore implements MessageStore {
      */
     public void start() throws Exception {
 
+        // 尝试获取文件锁 保证只被一个MessageStore读写
         lock = lockFile.getChannel().tryLock(0, 1, false);
         if (lock == null || lock.isShared() || !lock.isValid()) {
             throw new RuntimeException("Lock failed,MQ already started");
         }
 
+        // 写入lock
         lockFile.getChannel().write(ByteBuffer.wrap("lock".getBytes()));
         lockFile.getChannel().force(true);
         {
             /**
+             * todo 没看懂
+             * 1.确保根据提交日志的最大物理偏移量在恢复过程中截断快进消息；
+             * 2.可能缺少DLedger的commitPos，因此maxPhysicalPosInLogicQueue可能大于DLedgerCommitLog返回的maxOffset；
+             * 3.根据消耗队列计算reput偏移；
+             * 4.在启动提交日志之前，尤其是在自动更改代理角色时，请确保将分派落后消息。
+             *
              * 1. Make sure the fast-forward messages to be truncated during the recovering according to the max physical offset of the commitlog;
              * 2. DLedger committedPos may be missing, so the maxPhysicalPosInLogicQueue maybe bigger that maxOffset returned by DLedgerCommitLog, just let it go;
              * 3. Calculate the reput offset according to the consume queue;
              * 4. Make sure the fall-behind messages to be dispatched before starting the commitlog, especially when the broker role are automatically changed.
              */
+            // commitLog的getMinOffset方法获取最小的Offset
+            // commitLog会将消息持久化为文件，每个文件默认最大1G，当超过1G，则会新创建一个文件存储，如此反复
+            // 而commitLog会把这些文件在物理上不连续的Offset映射成逻辑上连续的Offset，以此来定位
             long maxPhysicalPosInLogicQueue = commitLog.getMinOffset();
+            // 遍历队列
             for (ConcurrentMap<Integer, ConsumeQueue> maps : this.consumeQueueTable.values()) {
                 for (ConsumeQueue logic : maps.values()) {
+                    // 通过遍历获得最大的offset
                     if (logic.getMaxPhysicOffset() > maxPhysicalPosInLogicQueue) {
                         maxPhysicalPosInLogicQueue = logic.getMaxPhysicOffset();
                     }
                 }
             }
+            // 遍历完成，maxPhysicalPosInLogicQueue就会被替换为最大的那次的消费Offset，这样后续就可以通过这个Offset映射到具体哪个文件的哪个位置
             if (maxPhysicalPosInLogicQueue < 0) {
                 maxPhysicalPosInLogicQueue = 0;
             }
@@ -269,6 +283,7 @@ public class DefaultMessageStore implements MessageStore {
             this.reputMessageService.start();
 
             /**
+             * 一直等待消息分配完毕
              *  1. Finish dispatching the messages fall behind, then to start other services.
              *  2. DLedger committedPos may be missing, so here just require dispatchBehindBytes <= 0
              */
@@ -282,11 +297,15 @@ public class DefaultMessageStore implements MessageStore {
             this.recoverTopicQueueTable();
         }
 
+        // 非DLeger情况下
+        // todo 高可用服务
         if (!messageStoreConfig.isEnableDLegerCommitLog()) {
             this.haService.start();
             this.handleScheduleMessageService(messageStoreConfig.getBrokerRole());
         }
 
+        // 接着开启flushConsumeQueueService服务
+        // 和reputMessageService类似，这里也会启动一个线程，使用doFlush方法定时刷新ConsumeQueue
         this.flushConsumeQueueService.start();
         this.commitLog.start();
         this.storeStatsService.start();
@@ -1231,6 +1250,7 @@ public class DefaultMessageStore implements MessageStore {
 
     private void addScheduleTask() {
 
+        // ①定期清除文件，会定期删除掉长时间（默认72小时）未被引用的CommitLog文件
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
@@ -1238,6 +1258,7 @@ public class DefaultMessageStore implements MessageStore {
             }
         }, 1000 * 60, this.messageStoreConfig.getCleanResourceInterval(), TimeUnit.MILLISECONDS);
 
+        // ②定期检查CommitLog和ConsumeQueue文件有否损坏、丢失，做日志打印
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
@@ -1245,6 +1266,7 @@ public class DefaultMessageStore implements MessageStore {
             }
         }, 1, 10, TimeUnit.MINUTES);
 
+        // ③定期虚拟机堆栈使用日志记录
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
@@ -1387,6 +1409,7 @@ public class DefaultMessageStore implements MessageStore {
 
     public void recoverTopicQueueTable() {
         HashMap<String/* topic-queueid */, Long/* offset */> table = new HashMap<String, Long>(1024);
+        // 由于前面的消息分配，这里将ConsumeQueue的Topic和QueueId，以及MaxOffset保存在table中，同时调用correctMinOffset方法根据物理队列最小offset计算修正逻辑队列最小offset
         long minPhyOffset = this.commitLog.getMinOffset();
         for (ConcurrentMap<Integer, ConsumeQueue> maps : this.consumeQueueTable.values()) {
             for (ConsumeQueue logic : maps.values()) {
@@ -1396,6 +1419,7 @@ public class DefaultMessageStore implements MessageStore {
             }
         }
 
+//        当所有的ConsumeQueue遍历完成后，更新commitLog的topicQueueTable
         this.commitLog.setTopicQueueTable(table);
     }
 
@@ -1510,6 +1534,7 @@ public class DefaultMessageStore implements MessageStore {
 
     class CommitLogDispatcherBuildIndex implements CommitLogDispatcher {
 
+        //根据messageIndexEnable属性的设置，调用indexService的buildIndex方法，实际上就是向Index文件的追加
         @Override
         public void dispatch(DispatchRequest request) {
             if (DefaultMessageStore.this.messageStoreConfig.isMessageIndexEnable()) {
@@ -1722,6 +1747,7 @@ public class DefaultMessageStore implements MessageStore {
         private static final int RETRY_TIMES_OVER = 3;
         private long lastFlushTimestamp = 0;
 
+        // 这里通过遍历consumeQueueTable中所有的ConsumeQueue，执行其flush方法
         private void doFlush(int retryTimes) {
             int flushConsumeQueueLeastPages = DefaultMessageStore.this.getMessageStoreConfig().getFlushConsumeQueueLeastPages();
 
@@ -1817,6 +1843,7 @@ public class DefaultMessageStore implements MessageStore {
         }
 
         public long behind() {
+//            用来检查是否分配完毕
             return DefaultMessageStore.this.commitLog.getMaxOffset() - this.reputFromOffset;
         }
 
@@ -1851,6 +1878,7 @@ public class DefaultMessageStore implements MessageStore {
                                 if (size > 0) {
                                     DefaultMessageStore.this.doDispatch(dispatchRequest);
 
+                                    // 如果当前是Master并且设置了长轮询的话，则需要通过messageArrivingListener通知消费队列有新的消息 todo
                                     if (BrokerRole.SLAVE != DefaultMessageStore.this.getMessageStoreConfig().getBrokerRole()
                                         && DefaultMessageStore.this.brokerConfig.isLongPollingEnable()) {
                                         DefaultMessageStore.this.messageArrivingListener.arriving(dispatchRequest.getTopic(),

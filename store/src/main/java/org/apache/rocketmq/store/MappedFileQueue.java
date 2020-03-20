@@ -39,6 +39,7 @@ public class MappedFileQueue {
 
     private final int mappedFileSize;
 
+    // 内存映射
     private final CopyOnWriteArrayList<MappedFile> mappedFiles = new CopyOnWriteArrayList<MappedFile>();
 
     private final AllocateMappedFileService allocateMappedFileService;
@@ -303,6 +304,8 @@ public class MappedFileQueue {
     }
 
     public long getMaxOffset() {
+        // 先通过getLastMappedFile得到最后一个文件的映射MappedFile
+        // 进而得到fileFromOffset，通过fileFromOffset+ReadPosition定位到当前文件读取指针的位置
         MappedFile mappedFile = getLastMappedFile();
         if (mappedFile != null) {
             return mappedFile.getFileFromOffset() + mappedFile.getReadPosition();
@@ -427,6 +430,7 @@ public class MappedFileQueue {
 
     public boolean flush(final int flushLeastPages) {
         boolean result = true;
+        // 根据flushedWhere，通过findMappedFileByOffset获取要刷新的文件映射MappedFile
         MappedFile mappedFile = this.findMappedFileByOffset(this.flushedWhere, this.flushedWhere == 0);
         if (mappedFile != null) {
             long tmpTimeStamp = mappedFile.getStoreTimestamp();
@@ -467,6 +471,7 @@ public class MappedFileQueue {
             MappedFile firstMappedFile = this.getFirstMappedFile();
             MappedFile lastMappedFile = this.getLastMappedFile();
             if (firstMappedFile != null && lastMappedFile != null) {
+                // 首先检查offset的有效性 offset越界
                 if (offset < firstMappedFile.getFileFromOffset() || offset >= lastMappedFile.getFileFromOffset() + this.mappedFileSize) {
                     LOG_ERROR.warn("Offset not matched. Request offset: {}, firstOffset: {}, lastOffset: {}, mappedFileSize: {}, mappedFiles count: {}",
                         offset,
@@ -475,6 +480,7 @@ public class MappedFileQueue {
                         this.mappedFileSize,
                         this.mappedFiles.size());
                 } else {
+                    // 得到offset对应的文件在mappedFiles这个list中的下标
                     int index = (int) ((offset / this.mappedFileSize) - (firstMappedFile.getFileFromOffset() / this.mappedFileSize));
                     MappedFile targetFile = null;
                     try {
@@ -511,6 +517,7 @@ public class MappedFileQueue {
 
         if (!this.mappedFiles.isEmpty()) {
             try {
+                // 获得第一个文件
                 mappedFileFirst = this.mappedFiles.get(0);
             } catch (IndexOutOfBoundsException e) {
                 //ignore

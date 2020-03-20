@@ -52,6 +52,7 @@ public class BrokerFastFailure {
     }
 
     public void start() {
+        // 清理过期请求
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
@@ -63,8 +64,10 @@ public class BrokerFastFailure {
     }
 
     private void cleanExpiredRequest() {
+        // 如果操作系统忙
         while (this.brokerController.getMessageStore().isOSPageCacheBusy()) {
             try {
+                // 从线程池中阻塞队列
                 if (!this.brokerController.getSendThreadPoolQueue().isEmpty()) {
                     final Runnable runnable = this.brokerController.getSendThreadPoolQueue().poll(0, TimeUnit.SECONDS);
                     if (null == runnable) {
@@ -72,6 +75,7 @@ public class BrokerFastFailure {
                     }
 
                     final RequestTask rt = castRunnable(runnable);
+                    // 直接返回忙 快速失败
                     rt.returnResponse(RemotingSysResponseCode.SYSTEM_BUSY, String.format("[PCBUSY_CLEAN_QUEUE]broker busy, start flow control for a while, period in queue: %sms, size of queue: %d", System.currentTimeMillis() - rt.getCreateTimestamp(), this.brokerController.getSendThreadPoolQueue().size()));
                 } else {
                     break;
@@ -79,6 +83,7 @@ public class BrokerFastFailure {
             } catch (Throwable ignored) {
             }
         }
+        //*********** 清理过期请求 ************
 
         cleanExpiredRequestInQueue(this.brokerController.getSendThreadPoolQueue(),
             this.brokerController.getBrokerConfig().getWaitTimeMillsInSendQueue());

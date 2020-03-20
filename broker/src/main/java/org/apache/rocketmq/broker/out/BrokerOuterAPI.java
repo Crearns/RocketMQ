@@ -266,9 +266,11 @@ public class BrokerOuterAPI {
         final TopicConfigSerializeWrapper topicConfigWrapper,
         final int timeoutMills) {
         final List<Boolean> changedList = new CopyOnWriteArrayList<>();
+//        首先获取NameServer的地址列表
         List<String> nameServerAddressList = this.remotingClient.getNameServerAddressList();
         if (nameServerAddressList != null && nameServerAddressList.size() > 0) {
             final CountDownLatch countDownLatch = new CountDownLatch(nameServerAddressList.size());
+            // 遍历所有NameServer地址
             for (final String namesrvAddr : nameServerAddressList) {
                 brokerOuterExecutor.execute(new Runnable() {
                     @Override
@@ -281,6 +283,7 @@ public class BrokerOuterAPI {
                             requestHeader.setClusterName(clusterName);
                             RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.QUERY_DATA_VERSION, requestHeader);
                             request.setBody(topicConfigWrapper.getDataVersion().encode());
+                            // 以同步方式向NameServe发送QUERY_DATA_VERSION请求，将DataVersion信息发送过去，在NameServe端进行比对，进行相应响应
                             RemotingCommand response = remotingClient.invokeSync(namesrvAddr, request, timeoutMills);
                             DataVersion nameServerDataVersion = null;
                             Boolean changed = false;
@@ -291,6 +294,8 @@ public class BrokerOuterAPI {
                                     changed = queryDataVersionResponseHeader.getChanged();
                                     byte[] body = response.getBody();
                                     if (body != null) {
+                                        // 在收到成功的响应后，检查回送的nameServerDataVersion是否相等，若不相等，在changedList中添加一个true
+                                        // 直至和所有NameServe比对完成
                                         nameServerDataVersion = DataVersion.decode(body, DataVersion.class);
                                         if (!topicConfigWrapper.getDataVersion().equals(nameServerDataVersion)) {
                                             changed = true;

@@ -229,6 +229,7 @@ public class MappedFile extends ReferenceResource {
         return this.fileFromOffset;
     }
 
+    // 这里就通过JDK的NIO提供的API完成20字节数据从currentPos起始位置的追加
     public boolean appendMessage(final byte[] data) {
         int currentPos = this.wrotePosition.get();
 
@@ -271,6 +272,10 @@ public class MappedFile extends ReferenceResource {
 
     /**
      * @return The current flushed position
+     *
+     * 这里就通过NIO的force，将更新的数据强制写入MappedFile对应的ConsumeQueue文件
+     *
+     * 完成写入后，更新flushedWhere值，方便下一次刷新的定位
      */
     public int flush(final int flushLeastPages) {
         if (this.isAbleToFlush(flushLeastPages)) {

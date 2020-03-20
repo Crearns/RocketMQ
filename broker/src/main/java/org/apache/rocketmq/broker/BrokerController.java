@@ -883,10 +883,12 @@ public class BrokerController {
             this.messageStore.start();
         }
 
+        // Netty 服务端启动
         if (this.remotingServer != null) {
             this.remotingServer.start();
         }
 
+        // Netty 服务端启动
         if (this.fastRemotingServer != null) {
             this.fastRemotingServer.start();
         }
@@ -895,14 +897,17 @@ public class BrokerController {
             this.fileWatchService.start();
         }
 
+        // Netty 客户端启动
         if (this.brokerOuterAPI != null) {
             this.brokerOuterAPI.start();
         }
 
+        // todo 消息拉取
         if (this.pullRequestHoldService != null) {
             this.pullRequestHoldService.start();
         }
 
+        // 定期清除channel缓存
         if (this.clientHousekeepingService != null) {
             this.clientHousekeepingService.start();
         }
@@ -911,6 +916,10 @@ public class BrokerController {
             this.filterServerManager.start();
         }
 
+        // 之后在非DLeger模式下，
+        // Master会启动事务消息检查，遍历未提交、未回滚的部分消息并向生产者发送检查请求以获取事务状态
+        // 进行偏移量的检查和计算等操作，并移除掉需要丢弃的消息
+        // Slave会启动同步操作
         if (!messageStoreConfig.isEnableDLegerCommitLog()) {
             startProcessorByHa(messageStoreConfig.getBrokerRole());
             handleSlaveSynchronize(messageStoreConfig.getBrokerRole());
@@ -920,6 +929,7 @@ public class BrokerController {
 
         this.registerBrokerAll(true, false, true);
 
+        // 定时注册broker
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -937,6 +947,7 @@ public class BrokerController {
         }
 
         if (this.brokerFastFailure != null) {
+            // 快速失败
             this.brokerFastFailure.start();
         }
 
@@ -1006,6 +1017,7 @@ public class BrokerController {
                     this.messageStore.updateHaMasterAddress(registerBrokerResult.getHaServerAddr());
                 }
 
+                // 设置master地址
                 this.slaveSynchronize.setMasterAddr(registerBrokerResult.getMasterAddr());
 
                 if (checkOrderConfig) {

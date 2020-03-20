@@ -375,6 +375,7 @@ public class ConsumeQueue {
         return this.minLogicOffset / CQ_STORE_UNIT_SIZE;
     }
 
+    // 这个方法主要是在重试次数内完成对putMessagePositionInfo的调用
     public void putMessagePositionInfoWrapper(DispatchRequest request) {
         final int maxRetries = 30;
         boolean canWrite = this.defaultMessageStore.getRunningFlags().isCQWriteable();
@@ -417,6 +418,17 @@ public class ConsumeQueue {
         this.defaultMessageStore.getRunningFlags().makeLogicsQueueError();
     }
 
+    /*
+     * 将DispatchRequest中封装的CommitLogOffset、MsgSize以及tagsCode这20字节的信息byteBufferIndex这个ByteBuffer中
+
+        根据ConsumeQueueOffset即cqOffset*CQ_STORE_UNIT_SIZE（20）计算expectLogicOffset
+
+        ConsumeQueue文件是通过20字节来存放对应CommitLog文件中的消息映射其原理和CommitLog的相同
+
+        expectLogicOffset就是ConsumeQueue文件逻辑Offset，由此可以通过getLastMappedFile找到对应的文件映射MappedFile
+
+        在得到MappedFile后通过appendMessage方法，将byteBufferIndex中的数据追加在对应的ConsumeQueue文件中
+     */
     private boolean putMessagePositionInfo(final long offset, final int size, final long tagsCode,
         final long cqOffset) {
 

@@ -93,6 +93,7 @@ public class CommitLog {
         return result;
     }
 
+    // todo
     public void start() {
         this.flushCommitLogService.start();
 
@@ -144,9 +145,12 @@ public class CommitLog {
     }
 
     public SelectMappedBufferResult getData(final long offset, final boolean returnFirstOnNotFound) {
+        // 这里的mappedFileSize就是文件的大小，默认1G
+        //根据reputFromOffset通过mappedFileQueue的findMappedFileByOffset方法定位具体的MappedFile文件映射
         int mappedFileSize = this.defaultMessageStore.getMessageStoreConfig().getMappedFileSizeCommitLog();
         MappedFile mappedFile = this.mappedFileQueue.findMappedFileByOffset(offset, returnFirstOnNotFound);
         if (mappedFile != null) {
+            // 因为文件是1G 所以offset对一个文件和对多个文件取模是一样的
             int pos = (int) (offset % mappedFileSize);
             SelectMappedBufferResult result = mappedFile.selectMappedBuffer(pos);
             return result;
@@ -816,9 +820,11 @@ public class CommitLog {
     }
 
     public long getMinOffset() {
+        // CommitLog管理的这些文件是通过mappedFileQueue管理，mappedFileQueue中会通过mappedFiles映射到每一个文件
         MappedFile mappedFile = this.mappedFileQueue.getFirstMappedFile();
         if (mappedFile != null) {
             if (mappedFile.isAvailable()) {
+                // 在得到第一个文件的MappedFile映射后，通过getFileFromOffset方法，获取该文件的Offset
                 return mappedFile.getFileFromOffset();
             } else {
                 return this.rollNextFile(mappedFile.getFileFromOffset());
