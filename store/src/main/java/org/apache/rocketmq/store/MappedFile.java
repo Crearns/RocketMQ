@@ -207,6 +207,8 @@ public class MappedFile extends ReferenceResource {
         int currentPos = this.wrotePosition.get();
 
         if (currentPos < this.fileSize) {
+            // 可以得到一个共享的子缓冲区ByteBuffer
+            // 稍微提一下，只有当Broker使用异步刷盘并且开启内存字节缓冲区的情况下，writeBuffer才有意义，否则都是mappedByteBuffer
             ByteBuffer byteBuffer = writeBuffer != null ? writeBuffer.slice() : this.mappedByteBuffer.slice();
             byteBuffer.position(currentPos);
             AppendMessageResult result;
