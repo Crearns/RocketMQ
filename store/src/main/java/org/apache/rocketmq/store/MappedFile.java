@@ -41,7 +41,7 @@ import org.apache.rocketmq.store.config.FlushDiskType;
 import org.apache.rocketmq.store.util.LibC;
 import sun.nio.ch.DirectBuffer;
 
-public class MappedFile extends ReferenceResource {
+public class  MappedFile extends ReferenceResource {
     public static final int OS_PAGE_SIZE = 1024 * 4;
     protected static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
@@ -286,6 +286,7 @@ public class MappedFile extends ReferenceResource {
 
                 try {
                     //We only append data to fileChannel or mappedByteBuffer, never both.
+                    // 只会给 fileChannel 或 mappedByteBuffer 加数据，不会同时force
                     if (writeBuffer != null || this.fileChannel.position() != 0) {
                         this.fileChannel.force(false);
                     } else {
@@ -350,14 +351,18 @@ public class MappedFile extends ReferenceResource {
         int flush = this.flushedPosition.get();
         int write = getReadPosition();
 
+        // 如果 fileSize == this.wrotePosition.get() 文件满
         if (this.isFull()) {
             return true;
         }
 
+        // 同步刷盘 所以 flushLeastPages = 0，只要有缓存就刷盘
+        // 如果是异步刷盘，flushLeastPages = 4，说明只有当缓存的消息至少是4（page个数）*4K（page大小）= 16K时，异步刷盘才会将缓存写入文件
         if (flushLeastPages > 0) {
             return ((write / OS_PAGE_SIZE) - (flush / OS_PAGE_SIZE)) >= flushLeastPages;
         }
 
+        // 当需要刷盘的位置 > flush 说明有盘可刷
         return write > flush;
     }
 

@@ -589,7 +589,6 @@ public class BrokerController {
     public void registerProcessor() {
         /**
          * SendMessageProcessor
-         * todo: SendMessageProcessor 后续深入分析
          */
         SendMessageProcessor sendProcessor = new SendMessageProcessor(this);
         sendProcessor.registerSendMessageHook(sendMessageHookList);

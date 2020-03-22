@@ -82,12 +82,14 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                 this.executeSendMessageHookBefore(ctx, request, mqtraceContext);
 
                 RemotingCommand response;
+                // 根据单条和批量执行不同逻辑
                 if (requestHeader.isBatch()) {
                     response = this.sendBatchMessage(ctx, request, mqtraceContext, requestHeader);
                 } else {
                     response = this.sendMessage(ctx, request, mqtraceContext, requestHeader);
                 }
 
+                // 执行所有SendMessageHook钩子的sendMessageAfter方法
                 this.executeSendMessageHookAfter(response, mqtraceContext);
                 return response;
         }

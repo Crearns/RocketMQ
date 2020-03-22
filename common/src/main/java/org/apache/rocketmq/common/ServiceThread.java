@@ -127,6 +127,7 @@ public abstract class ServiceThread implements Runnable {
     }
 
     protected void waitForRunning(long interval) {
+        // 通过CAS操作修改hasNotified值，从而调用onWaitEnd方法
         if (hasNotified.compareAndSet(true, false)) {
             this.onWaitEnd();
             return;
@@ -136,6 +137,9 @@ public abstract class ServiceThread implements Runnable {
         waitPoint.reset();
 
         try {
+            // 如果修改失败，则因为await进入阻塞，等待上面所说的putRequest方法将其唤醒
+            // 也就是说当Producer发送的消息被缓存成功后，调用handleDiskFlush方法后，唤醒刷盘线工作
+            // 当然刷盘线程在达到超时时间interval后也会唤醒
             waitPoint.await(interval, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             log.error("Interrupted", e);

@@ -93,7 +93,6 @@ public class CommitLog {
         return result;
     }
 
-    // todo
     public void start() {
         this.flushCommitLogService.start();
 
@@ -663,13 +662,14 @@ public class CommitLog {
         return putMessageResult;
     }
 
-    // todo 刷盘
     public void handleDiskFlush(AppendMessageResult result, PutMessageResult putMessageResult, MessageExt messageExt) {
         // Synchronization flush 同步刷盘
         if (FlushDiskType.SYNC_FLUSH == this.defaultMessageStore.getMessageStoreConfig().getFlushDiskType()) {
             final GroupCommitService service = (GroupCommitService) this.flushCommitLogService;
             if (messageExt.isWaitStoreMsgOK()) {
+                // result.getWroteOffset() + result.getWroteBytes() 获得下一个offset
                 GroupCommitRequest request = new GroupCommitRequest(result.getWroteOffset() + result.getWroteBytes());
+                // 将GroupCommitRequest添加到requestsWrite这个List中
                 service.putRequest(request);
                 boolean flushOK = request.waitForFlush(this.defaultMessageStore.getMessageStoreConfig().getSyncFlushTimeout());
                 if (!flushOK) {
@@ -938,10 +938,11 @@ public class CommitLog {
         public void run() {
             CommitLog.log.info(this.getServiceName() + " service started");
             while (!this.isStopped()) {
+                // 提交时间间隔，默认200ms
                 int interval = CommitLog.this.defaultMessageStore.getMessageStoreConfig().getCommitIntervalCommitLog();
-
+                // page大小，默认4个
                 int commitDataLeastPages = CommitLog.this.defaultMessageStore.getMessageStoreConfig().getCommitCommitLogLeastPages();
-
+                // 提交完成时间间隔，默认200ms
                 int commitDataThoroughInterval =
                     CommitLog.this.defaultMessageStore.getMessageStoreConfig().getCommitCommitLogThoroughInterval();
 
@@ -952,6 +953,7 @@ public class CommitLog {
                 }
 
                 try {
+                    // 基本和FlushCommitLogService相似，只不过调用了mappedFileQueue的commit方法  参数为4
                     boolean result = CommitLog.this.mappedFileQueue.commit(commitDataLeastPages);
                     long end = System.currentTimeMillis();
                     if (!result) {
@@ -986,11 +988,15 @@ public class CommitLog {
             CommitLog.log.info(this.getServiceName() + " service started");
 
             while (!this.isStopped()) {
+                // 是否使用定时刷盘 默认关闭
                 boolean flushCommitLogTimed = CommitLog.this.defaultMessageStore.getMessageStoreConfig().isFlushCommitLogTimed();
 
+                // 刷盘时间间隔，默认500ms
                 int interval = CommitLog.this.defaultMessageStore.getMessageStoreConfig().getFlushIntervalCommitLog();
+                // page大小，默认4个
                 int flushPhysicQueueLeastPages = CommitLog.this.defaultMessageStore.getMessageStoreConfig().getFlushCommitLogLeastPages();
 
+                // 彻底刷盘时间间隔，默认10s
                 int flushPhysicQueueThoroughInterval =
                     CommitLog.this.defaultMessageStore.getMessageStoreConfig().getFlushCommitLogThoroughInterval();
 
@@ -998,16 +1004,22 @@ public class CommitLog {
 
                 // Print flush progress
                 long currentTimeMillis = System.currentTimeMillis();
+
+                // 如果当前时间大于 上次刷盘时间+刷盘间隔 （即应该刷盘），则设定刷盘时间为当前
                 if (currentTimeMillis >= (this.lastFlushTimestamp + flushPhysicQueueThoroughInterval)) {
                     this.lastFlushTimestamp = currentTimeMillis;
                     flushPhysicQueueLeastPages = 0;
+                    // 每10次打印一次刷盘进度
                     printFlushProgress = (printTimes++ % 10) == 0;
                 }
 
                 try {
+                    // 当flushCommitLogTimed为true，使用sleep等待500ms
                     if (flushCommitLogTimed) {
                         Thread.sleep(interval);
                     } else {
+                        //当flushCommitLogTimed为false，调用waitForRunning在超时时间为500ms下阻塞
+                        // 其唤醒条件也就是在handleDiskFlush中的wakeup唤醒
                         this.waitForRunning(interval);
                     }
 
@@ -1016,6 +1028,7 @@ public class CommitLog {
                     }
 
                     long begin = System.currentTimeMillis();
+                    // 后面逻辑和同步一样
                     CommitLog.this.mappedFileQueue.flush(flushPhysicQueueLeastPages);
                     long storeTimestamp = CommitLog.this.mappedFileQueue.getStoreTimestamp();
                     if (storeTimestamp > 0) {
@@ -1096,6 +1109,8 @@ public class CommitLog {
         private volatile List<GroupCommitRequest> requestsRead = new ArrayList<GroupCommitRequest>();
 
         public synchronized void putRequest(final GroupCommitRequest request) {
+            // 在完成List的add操作后，会通过CAS操作修改hasNotified这个原子化的Boolean值
+            // 同时通过waitPoint的countDown进行唤醒操作，在后面会有用
             synchronized (this.requestsWrite) {
                 this.requestsWrite.add(request);
             }
@@ -1113,11 +1128,13 @@ public class CommitLog {
         private void doCommit() {
             synchronized (this.requestsRead) {
                 if (!this.requestsRead.isEmpty()) {
+                    // 遍历 requestsRead 表
                     for (GroupCommitRequest req : this.requestsRead) {
                         // There may be a message in the next file, so a maximum of
                         // two times the flush
                         boolean flushOK = false;
                         for (int i = 0; i < 2 && !flushOK; i++) {
+                            // 如果 getFlushedWhere 大于 getNextOffset，说明已经刷过盘了，不用再刷，退出循环
                             flushOK = CommitLog.this.mappedFileQueue.getFlushedWhere() >= req.getNextOffset();
 
                             if (!flushOK) {
@@ -1125,6 +1142,7 @@ public class CommitLog {
                             }
                         }
 
+                        // 唤醒线程
                         req.wakeupCustomer(flushOK);
                     }
 
@@ -1148,6 +1166,7 @@ public class CommitLog {
             while (!this.isStopped()) {
                 try {
                     this.waitForRunning(10);
+                    // 不停 doCommit
                     this.doCommit();
                 } catch (Exception e) {
                     CommitLog.log.warn(this.getServiceName() + " service has exception. ", e);
