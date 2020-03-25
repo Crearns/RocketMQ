@@ -890,7 +890,9 @@ public class DefaultMessageStore implements MessageStore {
             return false;
         }
 
+        // 其实调用了appendData
         boolean result = this.commitLog.appendData(startOffset, data);
+        // 在完成写入后，需要唤醒reputMessageService消息调度，以便Consumer的消费
         if (result) {
             this.reputMessageService.wakeup();
         } else {

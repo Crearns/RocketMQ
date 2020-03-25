@@ -452,6 +452,8 @@ public class MappedFileQueue {
         if (mappedFile != null) {
             int offset = mappedFile.commit(commitLeastPages);
             long where = mappedFile.getFileFromOffset() + offset;
+            // 在完成mappedFile的commit后，通过where和committedWhere来判断是否真的向fileChannel缓存了 ，只有确实缓存了result才是false！
+            // 之后会更新committedWhere，并返回result
             result = where == this.committedWhere;
             this.committedWhere = where;
         }

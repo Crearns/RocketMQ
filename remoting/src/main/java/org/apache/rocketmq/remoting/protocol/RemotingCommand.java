@@ -187,8 +187,8 @@ public class RemotingCommand {
     public static RemotingCommand decode(final ByteBuffer byteBuffer) {
         //等到消息的总长度
         int length = byteBuffer.limit();
-        //得到消息中int类型的长度,此处看代码是直接获取的(序列化类型&头长度)这一段,
-        // 猜测是不是接收到的之后ChannelHandler直接去掉了
+        // 得到消息中int类型的长度,此处看代码是直接获取的(序列化类型&头长度)这一段,
+        // 由于Netty的LengthFieldBasedFramedDecoder解码过程中会舍弃 直接去掉了
         int oriHeaderLen = byteBuffer.getInt();
         // 消息头长度
         int headerLength = getHeaderLength(oriHeaderLen);

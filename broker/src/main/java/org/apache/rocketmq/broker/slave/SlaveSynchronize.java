@@ -46,18 +46,26 @@ public class SlaveSynchronize {
     }
 
     public void syncAll() {
+        // 同步topic的配置信息
         this.syncTopicConfig();
+        // 同步Consumer的Offset信息
         this.syncConsumerOffset();
+        // 同步延迟队列信息
         this.syncDelayOffset();
+        // 同步订阅信息
         this.syncSubscriptionGroupConfig();
     }
 
     private void syncTopicConfig() {
         String masterAddrBak = this.masterAddr;
+        // 这里首先获取master的地址masterAddr，由于registerBrokerAll定时任务的存在
+        // 即便这一次没有获取到masterAddr，只要节点中有master，总会在后面定时执行时从NameServer中获取到
         if (masterAddrBak != null && !masterAddrBak.equals(brokerController.getBrokerAddr())) {
             try {
+                // 当获取到master地址后，通过BrokerOuterAPI的getAllTopicConfig方法，向master请求
                 TopicConfigSerializeWrapper topicWrapper =
                     this.brokerController.getBrokerOuterAPI().getAllTopicConfig(masterAddrBak);
+                // 判断版本是否一致，若不一致，会进行替换，这样slave的Topic配置信息就和master保持同步了
                 if (!this.brokerController.getTopicConfigManager().getDataVersion()
                     .equals(topicWrapper.getDataVersion())) {
 
@@ -84,6 +92,7 @@ public class SlaveSynchronize {
                     this.brokerController.getBrokerOuterAPI().getAllConsumerOffset(masterAddrBak);
                 this.brokerController.getConsumerOffsetManager().getOffsetTable()
                     .putAll(offsetWrapper.getOffsetTable());
+                // 进行持久化
                 this.brokerController.getConsumerOffsetManager().persist();
                 log.info("Update slave consumer offset from master, {}", masterAddrBak);
             } catch (Exception e) {
@@ -104,6 +113,7 @@ public class SlaveSynchronize {
                         StorePathConfigHelper.getDelayOffsetStorePath(this.brokerController
                             .getMessageStoreConfig().getStorePathRootDir());
                     try {
+                        // 持久化
                         MixAll.string2File(delayOffset, fileName);
                     } catch (IOException e) {
                         log.error("Persist file Exception, {}", fileName, e);

@@ -1176,12 +1176,17 @@ public class BrokerController {
         return accessValidatorMap;
     }
 
+    // 主从同步方法
     private void handleSlaveSynchronize(BrokerRole role) {
+        // 如果当前是从节点
         if (role == BrokerRole.SLAVE) {
             if (null != slaveSyncFuture) {
                 slaveSyncFuture.cancel(false);
             }
+            // 可以注意在之前会通过setMasterAddr将Master的地址设为null
+            // 这是由于在后面会通过另一个定时任务registerBrokerAll来向NameServer获取Master的地址
             this.slaveSynchronize.setMasterAddr(null);
+            // 这里设置了定时任务，执行slaveSynchronize的syncAll方法
             slaveSyncFuture = this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                 @Override
                 public void run() {

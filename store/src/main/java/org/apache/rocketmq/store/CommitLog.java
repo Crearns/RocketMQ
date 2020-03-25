@@ -68,6 +68,7 @@ public class CommitLog {
             defaultMessageStore.getMessageStoreConfig().getMappedFileSizeCommitLog(), defaultMessageStore.getAllocateMappedFileService());
         this.defaultMessageStore = defaultMessageStore;
 
+        // 同步刷盘和异步刷盘执行不同服务
         if (FlushDiskType.SYNC_FLUSH == defaultMessageStore.getMessageStoreConfig().getFlushDiskType()) {
             this.flushCommitLogService = new GroupCommitService();
         } else {
@@ -656,7 +657,7 @@ public class CommitLog {
         storeStatsService.getSinglePutMessageTopicSizeTotal(topic).addAndGet(result.getWroteBytes());
 
         handleDiskFlush(result, putMessageResult, msg);
-        // todo 高可用
+        // 同步双写
         handleHA(result, putMessageResult, msg);
 
         return putMessageResult;
@@ -671,6 +672,8 @@ public class CommitLog {
                 GroupCommitRequest request = new GroupCommitRequest(result.getWroteOffset() + result.getWroteBytes());
                 // 将GroupCommitRequest添加到requestsWrite这个List中
                 service.putRequest(request);
+                // 由于这里这里是同步刷盘，所以需要通过GroupCommitRequest的waitForFlush方法，在超时时间内等待该记录对应的刷盘完成
+                // 而异步刷盘会通过wakeup方法唤醒刷盘任务，并没有进行等待
                 boolean flushOK = request.waitForFlush(this.defaultMessageStore.getMessageStoreConfig().getSyncFlushTimeout());
                 if (!flushOK) {
                     log.error("do groupcommit, wait for flush failed, topic: " + messageExt.getTopic() + " tags: " + messageExt.getTags()
@@ -691,18 +694,24 @@ public class CommitLog {
         }
     }
 
+    // 同步双写
     public void handleHA(AppendMessageResult result, PutMessageResult putMessageResult, MessageExt messageExt) {
+        // 如果当前为master结点
         if (BrokerRole.SYNC_MASTER == this.defaultMessageStore.getMessageStoreConfig().getBrokerRole()) {
             HAService service = this.defaultMessageStore.getHaService();
             if (messageExt.isWaitStoreMsgOK()) {
                 // Determine whether to wait
+                // 根据Offset+WroteBytes创建一条记录GroupCommitRequest，然后会将添加在List中
                 if (service.isSlaveOK(result.getWroteOffset() + result.getWroteBytes())) {
                     GroupCommitRequest request = new GroupCommitRequest(result.getWroteOffset() + result.getWroteBytes());
                     service.putRequest(request);
+                    // 然后调用getWaitNotifyObject的wakeupAll方法，把阻塞中的所有WriteSocketService线程唤醒
                     service.getWaitNotifyObject().wakeupAll();
+//                  // 因为master和slave是一对多的关系，那么这里就会有多个slave连接，也就有多个WriteSocketService线程，保证消息能同步到所有slave中
                     boolean flushOK =
                         request.waitForFlush(this.defaultMessageStore.getMessageStoreConfig().getSyncFlushTimeout());
                     if (!flushOK) {
+                        // 通过waitForRunning进行阻塞，超时等待，最多五次等待，超过时间会向Producer发送FLUSH_SLAVE_TIMEOUT
                         log.error("do sync transfer other node, wait return, but failed, topic: " + messageExt.getTopic() + " tags: "
                             + messageExt.getTags() + " client address: " + messageExt.getBornHostNameString());
                         putMessageResult.setPutMessageStatus(PutMessageStatus.FLUSH_SLAVE_TIMEOUT);
@@ -957,6 +966,8 @@ public class CommitLog {
                     boolean result = CommitLog.this.mappedFileQueue.commit(commitDataLeastPages);
                     long end = System.currentTimeMillis();
                     if (!result) {
+                        // 只有真的向fileCfihannel缓存后，才会调用flushCommitLogService的wakeup方法
+                        // 也就是唤醒了FlushCommitLogService的刷盘线程
                         this.lastCommitTimestamp = end; // result = false means some data committed.
                         //now wake up flush thread.
                         flushCommitLogService.wakeup();
@@ -1018,7 +1029,7 @@ public class CommitLog {
                     if (flushCommitLogTimed) {
                         Thread.sleep(interval);
                     } else {
-                        //当flushCommitLogTimed为false，调用waitForRunning在超时时间为500ms下阻塞
+                        // 当flushCommitLogTimed为false，调用waitForRunning在超时时间为500ms下阻塞
                         // 其唤醒条件也就是在handleDiskFlush中的wakeup唤醒
                         this.waitForRunning(interval);
                     }
@@ -1134,7 +1145,7 @@ public class CommitLog {
                         // two times the flush
                         boolean flushOK = false;
                         for (int i = 0; i < 2 && !flushOK; i++) {
-                            // 如果 getFlushedWhere 大于 getNextOffset，说明已经刷过盘了，不用再刷，退出循环
+                            // 如果 getFlushedWhere 大于 getNextOffset，说明已经刷过盘了，不用再刷
                             flushOK = CommitLog.this.mappedFileQueue.getFlushedWhere() >= req.getNextOffset();
 
                             if (!flushOK) {
@@ -1192,6 +1203,10 @@ public class CommitLog {
 
         @Override
         protected void onWaitEnd() {
+            // 交换两表 这是一个非常有趣的做法，如果熟悉JVM的话，有没有觉得这其实很像新生代的复制算法！
+            // 当刷盘线程阻塞的时候，requestsWrite中会填充记录，当刷盘线程被唤醒工作的时候
+            // 首先会将requestsWrite和requestsRead进行交换，那么此时的记录就是从requestsRead中读取的了
+            // 而同时requestsWrite会变为空的List，消息记录就会往这个空的List中填充，如此往复
             this.swapRequests();
         }
 

@@ -321,8 +321,10 @@ public class  MappedFile extends ReferenceResource {
         }
 
         // All dirty data has been committed to FileChannel.
+        // 在向fileCfihannel缓存完毕后，会检查committedPosition是否达到了fileSize，也就是判断writeBuffer中的内容是不是去全部提交完毕
         if (writeBuffer != null && this.transientStorePool != null && this.fileSize == this.committedPosition.get()) {
             this.transientStorePool.returnBuffer(writeBuffer);
+            // 回收writeBuffer
             this.writeBuffer = null;
         }
 
@@ -333,6 +335,9 @@ public class  MappedFile extends ReferenceResource {
         int writePos = this.wrotePosition.get();
         int lastCommittedPosition = this.committedPosition.get();
 
+        // 会先将消息缓存在writeBuffer中而不是之前的mappedByteBuffer
+        // 这里就可以清楚地看到将writeBuffer中从lastCommittedPosition（上次提交位置）开始到writePos（缓存消息结束位置）的内容缓存到了fileChannel中相同的位置，并没有写入磁盘
+        // 在缓存到fileChannel后，会更新committedPosition值
         if (writePos - this.committedPosition.get() > 0) {
             try {
                 ByteBuffer byteBuffer = writeBuffer.slice();
