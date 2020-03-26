@@ -300,7 +300,6 @@ public class DefaultMessageStore implements MessageStore {
         }
 
         // 非DLeger情况下
-        // todo 高可用服务
         if (!messageStoreConfig.isEnableDLegerCommitLog()) {
             this.haService.start();
             this.handleScheduleMessageService(messageStoreConfig.getBrokerRole());

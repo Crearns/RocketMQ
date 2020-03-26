@@ -707,7 +707,8 @@ public class CommitLog {
                     service.putRequest(request);
                     // 然后调用getWaitNotifyObject的wakeupAll方法，把阻塞中的所有WriteSocketService线程唤醒
                     service.getWaitNotifyObject().wakeupAll();
-//                  // 因为master和slave是一对多的关系，那么这里就会有多个slave连接，也就有多个WriteSocketService线程，保证消息能同步到所有slave中
+                    // 因为master和slave是一对多的关系，那么这里就会有多个slave连接，也就有多个WriteSocketService线程，保证消息能同步到所有slave中
+                    // 在唤醒WriteSocketService线程工作后，调用request的waitForFlush方法，将自身阻塞，预示着同步复制的真正开启
                     boolean flushOK =
                         request.waitForFlush(this.defaultMessageStore.getMessageStoreConfig().getSyncFlushTimeout());
                     if (!flushOK) {
