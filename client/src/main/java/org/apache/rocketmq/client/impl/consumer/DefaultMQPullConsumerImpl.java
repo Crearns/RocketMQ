@@ -385,6 +385,7 @@ public class DefaultMQPullConsumerImpl implements MQConsumerInner {
         try {
             this.isRunning();
             Set<MessageQueue> mqs = new HashSet<MessageQueue>();
+            // 首先从rebalanceImpl中取出所有处理的消费队列MessageQueue集合
             Set<MessageQueue> allocateMq = this.rebalanceImpl.getProcessQueueTable().keySet();
             mqs.addAll(allocateMq);
             this.offsetStore.persistAll(mqs);
@@ -626,6 +627,7 @@ public class DefaultMQPullConsumerImpl implements MQConsumerInner {
 
                 this.copySubscription();
 
+                // 如果当前为集群消费模式，如果当前为 DEFAULT，则改为pid
                 if (this.defaultMQPullConsumer.getMessageModel() == MessageModel.CLUSTERING) {
                     this.defaultMQPullConsumer.changeInstanceNameToPID();
                 }
@@ -640,11 +642,14 @@ public class DefaultMQPullConsumerImpl implements MQConsumerInner {
                 this.pullAPIWrapper = new PullAPIWrapper(
                     mQClientFactory,
                     this.defaultMQPullConsumer.getConsumerGroup(), isUnitMode());
+                // 注册MessageHook
                 this.pullAPIWrapper.registerFilterMessageHook(filterMessageHookList);
 
                 if (this.defaultMQPullConsumer.getOffsetStore() != null) {
                     this.offsetStore = this.defaultMQPullConsumer.getOffsetStore();
                 } else {
+                    // 采用广播模式，消费者的消费进度offset会被保存在本地；而采用集群模式，消费者的消费进度offset会被保存在远端（broker）上
+                    // 故广播模式使用LocalFileOffsetStore，集群模式使用RemoteBrokerOffsetStore
                     switch (this.defaultMQPullConsumer.getMessageModel()) {
                         case BROADCASTING:
                             this.offsetStore = new LocalFileOffsetStore(this.mQClientFactory, this.defaultMQPullConsumer.getConsumerGroup());
@@ -735,9 +740,12 @@ public class DefaultMQPullConsumerImpl implements MQConsumerInner {
 
     private void copySubscription() throws MQClientException {
         try {
+            // registerTopics是由用户调用setRegisterTopics方法注册进来的Topic集合
+            // 在这里会将集合中的Topic包装成SubscriptionData保存在rebalanceImpl中
             Set<String> registerTopics = this.defaultMQPullConsumer.getRegisterTopics();
             if (registerTopics != null) {
                 for (final String topic : registerTopics) {
+
                     SubscriptionData subscriptionData = FilterAPI.buildSubscriptionData(this.defaultMQPullConsumer.getConsumerGroup(),
                         topic, SubscriptionData.SUB_ALL);
                     this.rebalanceImpl.getSubscriptionInner().put(topic, subscriptionData);

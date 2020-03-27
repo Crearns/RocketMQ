@@ -58,6 +58,7 @@ public class LocalFileOffsetStore implements OffsetStore {
             "offsets.json";
     }
 
+    // 在采用广播模式，即LocalFileOffsetStore，调用load方法会对其配置文件offsets.json进行加载
     @Override
     public void load() throws MQClientException {
         OffsetSerializeWrapper offsetSerializeWrapper = this.readLocalOffset();
@@ -133,6 +134,8 @@ public class LocalFileOffsetStore implements OffsetStore {
         if (null == mqs || mqs.isEmpty())
             return;
 
+        // 这里和之前的load方法相反，会将MessageQueue对应的offset信息替换掉原来的json文件中的内容
+        // 这样就完成了广播模式下定时持久化消费者队列的消费进度
         OffsetSerializeWrapper offsetSerializeWrapper = new OffsetSerializeWrapper();
         for (Map.Entry<MessageQueue, AtomicLong> entry : this.offsetTable.entrySet()) {
             if (mqs.contains(entry.getKey())) {

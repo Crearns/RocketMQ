@@ -272,7 +272,7 @@ public class BrokerController {
         if (result) {
             // netty server
             this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.clientHousekeepingService);
-            // 克隆一份netty配置 todo: vip
+            // 克隆一份netty配置
             NettyServerConfig fastConfig = (NettyServerConfig) this.nettyServerConfig.clone();
             // 监听 10909
             fastConfig.setListenPort(nettyServerConfig.getListenPort() - 2);

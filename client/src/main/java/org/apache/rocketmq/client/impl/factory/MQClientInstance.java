@@ -244,7 +244,7 @@ public class MQClientInstance {
                     this.startScheduledTask();
                     // Start pull service 开启pullMessageService服务，为消费者拉取消息 todo consumer
                     this.pullMessageService.start();
-                    // Start rebalance service 开启rebalanceService服务，用来均衡消息队列 todo consumer
+                    // Start rebalance service 开启rebalanceService服务，用来均衡消息队列
                     this.rebalanceService.start();
                     // Start push service
                     this.defaultMQProducer.getDefaultMQProducerImpl().start(false);
@@ -319,7 +319,7 @@ public class MQClientInstance {
             }
         }, 1000 * 10, this.clientConfig.getPersistConsumerOffsetInterval(), TimeUnit.MILLISECONDS);
 
-        // ⑤定时调整消费者端的线程池的大小 todo consumer
+        // ⑤定时调整消费者端的线程池的大小 todo PushConsumer
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -991,6 +991,7 @@ public class MQClientInstance {
     }
 
     public void doRebalance() {
+        // 这里就会取得copySubscription方法中说过的订阅Topic集合，这个集合会在②中的定时任务会通过NameServer来进行更新
         for (Map.Entry<String, MQConsumerInner> entry : this.consumerTable.entrySet()) {
             MQConsumerInner impl = entry.getValue();
             if (impl != null) {
@@ -1016,6 +1017,7 @@ public class MQClientInstance {
         boolean slave = false;
         boolean found = false;
 
+        // 遍历 Broker 地址
         HashMap<Long/* brokerId */, String/* address */> map = this.brokerAddrTable.get(brokerName);
         if (map != null && !map.isEmpty()) {
             for (Map.Entry<Long, String> entry : map.entrySet()) {
@@ -1090,6 +1092,7 @@ public class MQClientInstance {
         return 0;
     }
 
+
     public List<String> findConsumerIdList(final String topic, final String group) {
         String brokerAddr = this.findBrokerAddrByTopic(topic);
         if (null == brokerAddr) {
@@ -1099,6 +1102,8 @@ public class MQClientInstance {
 
         if (null != brokerAddr) {
             try {
+                // 首先还是根据Topic得到消息队列的集合
+                // 由于是集合模式，每个消费者会取得不同的消息，所以这里通过findConsumerIdList方法，得到消费者的ID列表
                 return this.mQClientAPIImpl.getConsumerIdListByGroup(brokerAddr, group, 3000);
             } catch (Exception e) {
                 log.warn("getConsumerIdListByGroup exception, " + brokerAddr + " " + group, e);

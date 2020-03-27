@@ -51,6 +51,7 @@ public class RemoteBrokerOffsetStore implements OffsetStore {
         this.groupName = groupName;
     }
 
+    // 无实现
     @Override
     public void load() {
     }
@@ -117,6 +118,8 @@ public class RemoteBrokerOffsetStore implements OffsetStore {
             return;
 
         final HashSet<MessageQueue> unusedMQ = new HashSet<MessageQueue>();
+        // 和上面类似，遍历offsetTable中的内容，只不过不是保存在了本地，而是通过updateConsumeOffsetToBroker向Broker发送
+        // updateConsumeOffsetToBroker方法
         if (!mqs.isEmpty()) {
             for (Map.Entry<MessageQueue, AtomicLong> entry : this.offsetTable.entrySet()) {
                 MessageQueue mq = entry.getKey();
@@ -204,7 +207,8 @@ public class RemoteBrokerOffsetStore implements OffsetStore {
         MQBrokerException, InterruptedException, MQClientException {
         FindBrokerResult findBrokerResult = this.mQClientFactory.findBrokerAddressInAdmin(mq.getBrokerName());
         if (null == findBrokerResult) {
-
+            // 若是没有找到会执行updateTopicRouteInfoFromNameServer方法，也就是执行了一次定时任务中的方法，立即更新一次
+            //再通过findBrokerAddressInAdmin方法，重新查找
             this.mQClientFactory.updateTopicRouteInfoFromNameServer(mq.getTopic());
             findBrokerResult = this.mQClientFactory.findBrokerAddressInAdmin(mq.getBrokerName());
         }
