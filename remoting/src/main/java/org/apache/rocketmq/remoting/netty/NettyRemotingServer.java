@@ -522,26 +522,4 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
             RemotingUtil.closeChannel(ctx.channel());
         }
     }
-
-
-    public static void main(String[] args) {
-        NettyServerConfig config = new NettyServerConfig();
-        config.setListenPort(8899);
-        NettyRemotingServer server = new NettyRemotingServer(config);
-
-        server.registerDefaultProcessor(new NettyRequestProcessor() {
-            @Override
-            public RemotingCommand processRequest(ChannelHandlerContext ctx, RemotingCommand request) throws Exception {
-                System.out.println("收到");
-                return null;
-            }
-
-            @Override
-            public boolean rejectRequest() {
-                return false;
-            }
-        }, Executors.newSingleThreadExecutor());
-
-        server.start();
-    }
 }

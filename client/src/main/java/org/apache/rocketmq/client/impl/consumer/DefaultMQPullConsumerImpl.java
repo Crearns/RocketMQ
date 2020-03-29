@@ -239,6 +239,7 @@ public class DefaultMQPullConsumerImpl implements MQConsumerInner {
             throw new MQClientException("maxNums <= 0", null);
         }
 
+        // 判断是否订阅topic
         this.subscriptionAutomatically(mq.getTopic());
 
         int sysFlag = PullSysFlag.buildSysFlag(false, block, true, false);
@@ -294,10 +295,12 @@ public class DefaultMQPullConsumerImpl implements MQConsumerInner {
     }
 
     public void subscriptionAutomatically(final String topic) {
+        // 如果没有订阅
         if (!this.rebalanceImpl.getSubscriptionInner().containsKey(topic)) {
             try {
                 SubscriptionData subscriptionData = FilterAPI.buildSubscriptionData(this.defaultMQPullConsumer.getConsumerGroup(),
                     topic, SubscriptionData.SUB_ALL);
+                // 若是没有就新建一条订阅数据保存在rebalanceImpl的subscriptionInner中
                 this.rebalanceImpl.subscriptionInner.putIfAbsent(topic, subscriptionData);
             } catch (Exception ignore) {
             }
@@ -493,6 +496,7 @@ public class DefaultMQPullConsumerImpl implements MQConsumerInner {
             long timeoutMillis = block ? this.defaultMQPullConsumer.getConsumerTimeoutMillisWhenSuspend() : timeout;
 
             boolean isTagType = ExpressionType.isTagType(subscriptionData.getExpressionType());
+            // 过程基本上个同步拉取类似，只不过在调用pullKernelImpl方法时，会创建一个PullCallback
             this.pullAPIWrapper.pullKernelImpl(
                 mq,
                 subscriptionData.getSubString(),
@@ -508,6 +512,7 @@ public class DefaultMQPullConsumerImpl implements MQConsumerInner {
                 new PullCallback() {
 
                     @Override
+                    // 在onSuccess回调的参数中，同同步方式类似，会通过processPullResult方法，对结果进一步加工
                     public void onSuccess(PullResult pullResult) {
                         PullResult userPullResult = DefaultMQPullConsumerImpl.this.pullAPIWrapper.processPullResult(mq, pullResult, subscriptionData);
                         resetTopic(userPullResult.getMsgFoundList());
