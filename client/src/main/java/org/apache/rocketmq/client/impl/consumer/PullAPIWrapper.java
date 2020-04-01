@@ -184,6 +184,7 @@ public class PullAPIWrapper {
             }
             int sysFlagInner = sysFlag;
 
+            // 如果是从Slave拉取，则对FLAG_COMMIT_OFFSET进行取反
             if (findBrokerResult.isSlave()) {
                 sysFlagInner = PullSysFlag.clearCommitOffsetFlag(sysFlagInner);
             }
@@ -203,10 +204,12 @@ public class PullAPIWrapper {
             requestHeader.setExpressionType(expressionType);
 
             String brokerAddr = findBrokerResult.getBrokerAddr();
+            // 如果消息过滤模式为类过滤模式，则需要根据主题名称、broker地址找到注册在Broker上的FilterServer地址
+            // 从FilterServer上拉取消息，否则从broker上拉取消息
             if (PullSysFlag.hasClassFilterFlag(sysFlagInner)) {
                 brokerAddr = computPullFromWhichFilterServer(mq.getTopic(), brokerAddr);
             }
-
+            //调用MQClientAPIImpl的pullMessage方法进行消息拉取,因为是异步拉取，最终则会调用MQClientAPIImpl的pullMessageAsync方法
             PullResult pullResult = this.mQClientFactory.getMQClientAPIImpl().pullMessage(
                 brokerAddr,
                 requestHeader,

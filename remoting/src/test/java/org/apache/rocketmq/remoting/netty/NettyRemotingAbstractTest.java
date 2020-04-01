@@ -68,7 +68,6 @@ public class NettyRemotingAbstractTest {
         RemotingCommand response = RemotingCommand.createResponseCommand(0, "Foo");
         response.setOpaque(1);
         remotingAbstract.processResponseCommand(null, response);
-
         assertThat(semaphore.availablePermits()).isEqualTo(1);
     }
 
@@ -107,4 +106,5 @@ public class NettyRemotingAbstractTest {
         remotingAbstract.scanResponseTable();
         assertNull(remotingAbstract.responseTable.get(dummyId));
     }
+
 }

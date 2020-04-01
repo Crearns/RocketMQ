@@ -523,6 +523,7 @@ public class DefaultMessageStore implements MessageStore {
         return commitLog;
     }
 
+    // todo : 深入分析获得Message
     public GetMessageResult getMessage(final String group, final String topic, final int queueId, final long offset,
         final int maxMsgNums,
         final MessageFilter messageFilter) {

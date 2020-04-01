@@ -731,12 +731,15 @@ public class MQClientAPIImpl {
         final long timeoutMillis,
         final PullCallback pullCallback
     ) throws RemotingException, InterruptedException {
+        //将消息拉取的请求发送到broker，broker返回结果后调用operationComplete进行处理。
         this.remotingClient.invokeAsync(addr, request, timeoutMillis, new InvokeCallback() {
             @Override
             public void operationComplete(ResponseFuture responseFuture) {
                 RemotingCommand response = responseFuture.getResponseCommand();
                 if (response != null) {
                     try {
+                        // 服务端返回结果后，会根据响应结果解码成PullResultExt对象
+                        // 将消息内容封装到PullResultExt对象的byte[] messageBinary，并且回调PullCallback的onSuccess方法
                         PullResult pullResult = MQClientAPIImpl.this.processPullResponse(response);
                         assert pullResult != null;
                         pullCallback.onSuccess(pullResult);
@@ -744,6 +747,7 @@ public class MQClientAPIImpl {
                         pullCallback.onException(e);
                     }
                 } else {
+                    //拉取失败的处理
                     if (!responseFuture.isSendRequestOK()) {
                         pullCallback.onException(new MQClientException("send request failed to " + addr + ". Request: " + request, responseFuture.getCause()));
                     } else if (responseFuture.isTimeout()) {
