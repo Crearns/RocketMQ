@@ -464,7 +464,6 @@ public class BrokerController {
                         @Override
                         public void run() {
                             try {
-                                // todo
                                 BrokerController.this.printMasterAndSlaveDiff();
                             } catch (Throwable e) {
                                 log.error("schedule printMasterAndSlaveDiff error.", e);

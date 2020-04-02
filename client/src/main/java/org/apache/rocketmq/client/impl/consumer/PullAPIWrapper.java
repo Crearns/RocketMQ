@@ -113,9 +113,11 @@ public class PullAPIWrapper {
                     Long.toString(pullResult.getMaxOffset()));
             }
 
+            // 设置消息列表
             pullResultExt.setMsgFoundList(msgListFilterAgain);
         }
 
+        // 清空消息二进制数组
         pullResultExt.setMessageBinary(null);
 
         return pullResult;
@@ -182,6 +184,7 @@ public class PullAPIWrapper {
                         + findBrokerResult.getBrokerVersion() + "] does not upgrade to support for filter message by " + expressionType, null);
                 }
             }
+            // 请求拉取消息
             int sysFlagInner = sysFlag;
 
             // 如果是从Slave拉取，则对FLAG_COMMIT_OFFSET进行取反
@@ -220,19 +223,23 @@ public class PullAPIWrapper {
             return pullResult;
         }
 
+        // Broker信息不存在，则抛出异常
         throw new MQClientException("The broker[" + mq.getBrokerName() + "] not exist", null);
     }
 
     public long recalculatePullFromWhichNode(final MessageQueue mq) {
+        // 若开启默认Broker开关，则返回默认Broker编号
         if (this.isConnectBrokerByUser()) {
             return this.defaultBrokerId;
         }
 
+        // 若消息队列映射拉取Broker存在，则返回映射Broker编号
         AtomicLong suggest = this.pullFromWhichNodeTable.get(mq);
         if (suggest != null) {
             return suggest.get();
         }
 
+        // 返回Broker主节点编号
         return MixAll.MASTER_ID;
     }
 

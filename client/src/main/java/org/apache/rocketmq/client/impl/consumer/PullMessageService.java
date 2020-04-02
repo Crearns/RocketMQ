@@ -29,8 +29,17 @@ import org.apache.rocketmq.common.utils.ThreadUtils;
 
 public class PullMessageService extends ServiceThread {
     private final InternalLogger log = ClientLogger.getLog();
+    /**
+     * 拉取消息请求队列
+     */
     private final LinkedBlockingQueue<PullRequest> pullRequestQueue = new LinkedBlockingQueue<PullRequest>();
+    /**
+     * MQClient对象
+     */
     private final MQClientInstance mQClientFactory;
+    /**
+     * 定时器。用于延迟提交拉取请求
+     */
     private final ScheduledExecutorService scheduledExecutorService = Executors
         .newSingleThreadScheduledExecutor(new ThreadFactory() {
             @Override
@@ -43,6 +52,11 @@ public class PullMessageService extends ServiceThread {
         this.mQClientFactory = mQClientFactory;
     }
 
+    /**
+     * 执行延迟拉取消息请求
+     * @param pullRequest 拉取消息请求
+     * @param timeDelay 延迟时长
+     */
     public void executePullRequestLater(final PullRequest pullRequest, final long timeDelay) {
         if (!isStopped()) {
             this.scheduledExecutorService.schedule(new Runnable() {
@@ -56,6 +70,10 @@ public class PullMessageService extends ServiceThread {
         }
     }
 
+    /**
+     * 执行立即拉取消息请求
+     * @param pullRequest 拉取消息请求
+     */
     public void executePullRequestImmediately(final PullRequest pullRequest) {
         try {
             this.pullRequestQueue.put(pullRequest);
@@ -64,6 +82,11 @@ public class PullMessageService extends ServiceThread {
         }
     }
 
+    /**
+     * 执行延迟任务
+     * @param r 任务
+     * @param timeDelay 延迟时长
+     */
     public void executeTaskLater(final Runnable r, final long timeDelay) {
         if (!isStopped()) {
             this.scheduledExecutorService.schedule(r, timeDelay, TimeUnit.MILLISECONDS);
@@ -76,6 +99,10 @@ public class PullMessageService extends ServiceThread {
         return scheduledExecutorService;
     }
 
+    /**
+     * 拉取消息
+     * @param pullRequest 拉取消息请求
+     */
     private void pullMessage(final PullRequest pullRequest) {
         final MQConsumerInner consumer = this.mQClientFactory.selectConsumer(pullRequest.getConsumerGroup());
         if (consumer != null) {
