@@ -900,7 +900,6 @@ public class BrokerController {
             this.brokerOuterAPI.start();
         }
 
-        // todo 消息拉取
         if (this.pullRequestHoldService != null) {
             this.pullRequestHoldService.start();
         }

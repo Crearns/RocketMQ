@@ -195,8 +195,10 @@ public class TransactionalMessageBridge {
         MessageAccessor.putProperty(msgInner, MessageConst.PROPERTY_REAL_TOPIC, msgInner.getTopic());
         MessageAccessor.putProperty(msgInner, MessageConst.PROPERTY_REAL_QUEUE_ID,
             String.valueOf(msgInner.getQueueId()));
+        // 重置事务标识，后续的IndexService和
         msgInner.setSysFlag(
             MessageSysFlag.resetTransactionValue(msgInner.getSysFlag(), MessageSysFlag.TRANSACTION_NOT_TYPE));
+        // 设置内部消息的Topic为MixAll.RMQ_SYS_TRANS_HALF_TOPIC对应的值
         msgInner.setTopic(TransactionalMessageUtil.buildHalfTopic());
         msgInner.setQueueId(0);
         msgInner.setPropertiesString(MessageDecoder.messageProperties2String(msgInner.getProperties()));
@@ -204,6 +206,7 @@ public class TransactionalMessageBridge {
     }
 
     public boolean putOpMessage(MessageExt messageExt, String opType) {
+        // 生成一个MessageQueue，该MessageQueue重写了hashCode,equals方法，如果成员变量值相同，则会被认为是相等的关系。
         MessageQueue messageQueue = new MessageQueue(messageExt.getTopic(),
             this.brokerController.getBrokerConfig().getBrokerName(), messageExt.getQueueId());
         if (TransactionalMessageUtil.REMOVETAG.equals(opType)) {

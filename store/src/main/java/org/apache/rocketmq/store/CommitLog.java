@@ -1280,7 +1280,7 @@ public class CommitLog {
             }
 
             // Transaction messages that require special handling
-            // todo 事务相关
+            // 事务消息需要特殊处理
             final int tranType = MessageSysFlag.getTransactionValue(msgInner.getSysFlag());
             switch (tranType) {
                 // Prepared and Rollback message is not consumed, will not enter the

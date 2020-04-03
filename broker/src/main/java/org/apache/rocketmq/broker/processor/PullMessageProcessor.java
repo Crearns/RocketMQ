@@ -121,7 +121,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
             return response;
         }
 
-        // 是否支持挂起，应该是和长轮询相关 TODO
+        // 是否支持挂起，应该是和长轮询相关
         final boolean hasSuspendFlag = PullSysFlag.hasSuspendFlag(requestHeader.getSysFlag());
         final boolean hasCommitOffsetFlag = PullSysFlag.hasCommitOffsetFlag(requestHeader.getSysFlag());
         // 消息过滤机制是否为表达式
