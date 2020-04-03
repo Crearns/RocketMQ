@@ -330,7 +330,9 @@ public class CommitLog {
 
                 // Timing message processing
                 {
+                    // 获得延时等级
                     String t = propertiesMap.get(MessageConst.PROPERTY_DELAY_TIME_LEVEL);
+                    // 如果topic为SCHEDULE_TOPIC_XXXX
                     if (ScheduleMessageService.SCHEDULE_TOPIC.equals(topic) && t != null) {
                         int delayLevel = Integer.parseInt(t);
 
@@ -338,6 +340,7 @@ public class CommitLog {
                             delayLevel = this.defaultMessageStore.getScheduleMessageService().getMaxDelayLevel();
                         }
 
+                        // 通过存储时间和等级得到tagCode
                         if (delayLevel > 0) {
                             tagsCode = this.defaultMessageStore.getScheduleMessageService().computeDeliverTimestamp(delayLevel,
                                 storeTimestamp);
@@ -556,7 +559,6 @@ public class CommitLog {
         int queueId = msg.getQueueId();
 
         final int tranType = MessageSysFlag.getTransactionValue(msg.getSysFlag());
-        // todo 事务相关
         if (tranType == MessageSysFlag.TRANSACTION_NOT_TYPE
             || tranType == MessageSysFlag.TRANSACTION_COMMIT_TYPE) {
             // Delay Delivery
@@ -565,7 +567,10 @@ public class CommitLog {
                     msg.setDelayTimeLevel(this.defaultMessageStore.getScheduleMessageService().getMaxDelayLevel());
                 }
 
+                // 存储消息时，延迟消息进入 `Topic` 为 `SCHEDULE_TOPIC_XXXX` 。
                 topic = ScheduleMessageService.SCHEDULE_TOPIC;
+
+                // 延迟级别 与 消息队列编号 做固定映射
                 queueId = ScheduleMessageService.delayLevel2QueueId(msg.getDelayTimeLevel());
 
                 // Backup real topic, queueId
