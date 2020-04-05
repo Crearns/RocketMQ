@@ -513,7 +513,7 @@ public class BrokerController {
                     log.warn("FileWatchService created error, can't load the certificate dynamically");
                 }
             }
-            // 初始化事务 todo 事务相关
+            // 初始化事务
             initialTransaction();
             // 初始化ACL
             initialAcl();
@@ -528,7 +528,7 @@ public class BrokerController {
         //"META-INF/service/org.apache.rocketmq.broker.transaction.TransactionalMessageService"
         //"META-INF/service/org.apache.rocketmq.broker.transaction.AbstractTransactionalMessageCheckListener"
         //还创建了TransactionalMessageCheckService
-        // todo 这些类有啥用 事务相关到后面深入分析
+        // 主要是事务相关的类 比如half消息以及回查
         this.transactionalMessageService = ServiceProvider.loadClass(ServiceProvider.TRANSACTION_SERVICE_ID, TransactionalMessageService.class);
         if (null == this.transactionalMessageService) {
             this.transactionalMessageService = new TransactionalMessageServiceImpl(new TransactionalMessageBridge(this, this.getMessageStore()));

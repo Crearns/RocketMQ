@@ -333,7 +333,7 @@ public abstract class RebalanceImpl {
         }
     }
 
-    // todo 没看懂
+
 
     /**
      * 移除 在processQueueTable && 不存在于 mqSet 里的消息队列

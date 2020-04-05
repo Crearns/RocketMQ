@@ -1103,7 +1103,7 @@ public class MQClientInstance {
         if (null != brokerAddr) {
             try {
                 // 首先还是根据Topic得到消息队列的集合
-                // 由于是集合模式，每个消费者会取得不同的消息，所以这里通过findConsumerIdList方法，得到消费者的ID列表
+                // 由于是集群模式，每个消费者会取得不同的消息，所以这里通过findConsumerIdList方法，得到消费者的ID列表
                 return this.mQClientAPIImpl.getConsumerIdListByGroup(brokerAddr, group, 3000);
             } catch (Exception e) {
                 log.warn("getConsumerIdListByGroup exception, " + brokerAddr + " " + group, e);

@@ -272,9 +272,12 @@ public class MQClientAPIImpl {
         requestHeader.setDefaultTopic(defaultTopic);
         requestHeader.setReadQueueNums(topicConfig.getReadQueueNums());
         requestHeader.setWriteQueueNums(topicConfig.getWriteQueueNums());
+        //设置topic的权限，可读，可写
         requestHeader.setPerm(topicConfig.getPerm());
+        //设置topic支持的消息过滤类型
         requestHeader.setTopicFilterType(topicConfig.getTopicFilterType().name());
         requestHeader.setTopicSysFlag(topicConfig.getTopicSysFlag());
+        //设置是否是顺序消息topic
         requestHeader.setOrder(topicConfig.isOrder());
 
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.UPDATE_AND_CREATE_TOPIC, requestHeader);

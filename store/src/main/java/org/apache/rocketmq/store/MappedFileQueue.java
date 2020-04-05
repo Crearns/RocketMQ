@@ -130,12 +130,15 @@ public class MappedFileQueue {
             while (iterator.hasNext()) {
                 MappedFile cur = iterator.next();
                 if (!this.mappedFiles.contains(cur)) {
+                    // 跳过不存在的 mappedFile
+                    // This mappedFile is not contained by mappedFiles, so skip it
                     iterator.remove();
                     log.info("This mappedFile {} is not contained by mappedFiles, so skip it.", cur.getFileName());
                 }
             }
 
             try {
+                // 将要删除的mappedFile从mappedFileQueue删除
                 if (!this.mappedFiles.removeAll(files)) {
                     log.error("deleteExpiredFile remove failed.");
                 }
@@ -356,6 +359,7 @@ public class MappedFileQueue {
                 MappedFile mappedFile = (MappedFile) mfs[i];
                 long liveMaxTimestamp = mappedFile.getLastModifiedTimestamp() + expiredTime;
                 if (System.currentTimeMillis() >= liveMaxTimestamp || cleanImmediately) {
+                    // 如果已经过期，调用destroy方法，里面是调用shutdown方法
                     if (mappedFile.destroy(intervalForcibly)) {
                         files.add(mappedFile);
                         deleteCount++;

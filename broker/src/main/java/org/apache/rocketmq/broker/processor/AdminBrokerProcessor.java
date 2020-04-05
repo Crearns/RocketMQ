@@ -244,7 +244,7 @@ public class AdminBrokerProcessor implements NettyRequestProcessor {
         final CreateTopicRequestHeader requestHeader =
             (CreateTopicRequestHeader) request.decodeCommandCustomHeader(CreateTopicRequestHeader.class);
         log.info("updateAndCreateTopic called by {}", RemotingHelper.parseChannelRemoteAddr(ctx.channel()));
-
+        //1、判断topicName的合法性，不能和clusterName同名
         if (requestHeader.getTopic().equals(this.brokerController.getBrokerConfig().getBrokerClusterName())) {
             String errorMsg = "the topic[" + requestHeader.getTopic() + "] is conflict with system reserved words.";
             log.warn(errorMsg);
@@ -253,7 +253,7 @@ public class AdminBrokerProcessor implements NettyRequestProcessor {
             return response;
         }
 
-        try {
+        try {//2、先回复客户端创建成功，后更新broker缓存
             response.setCode(ResponseCode.SUCCESS);
             response.setOpaque(request.getOpaque());
             response.markResponseType();
@@ -269,9 +269,9 @@ public class AdminBrokerProcessor implements NettyRequestProcessor {
         topicConfig.setTopicFilterType(requestHeader.getTopicFilterTypeEnum());
         topicConfig.setPerm(requestHeader.getPerm());
         topicConfig.setTopicSysFlag(requestHeader.getTopicSysFlag() == null ? 0 : requestHeader.getTopicSysFlag());
-
+        //3、更新TopicConfigManager中的topic配置信息。不存在则创建，存在则更新，并且持久化到文件中
         this.brokerController.getTopicConfigManager().updateTopicConfig(topicConfig);
-
+        //4、broker将topic信息同步到nameserv
         this.brokerController.registerIncrementBrokerData(topicConfig, this.brokerController.getTopicConfigManager().getDataVersion());
 
         return null;

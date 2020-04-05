@@ -504,11 +504,13 @@ public class DefaultMQAdminExtImpl implements MQAdminExt, MQAdminExtInner {
     public Map<MessageQueue, Long> resetOffsetByTimestamp(String topic, String group, long timestamp, boolean isForce,
         boolean isC)
         throws RemotingException, MQBrokerException, InterruptedException, MQClientException {
+        // 从 nameserver 获知 topic 分布在哪些 broker 上
         TopicRouteData topicRouteData = this.examineTopicRouteInfo(topic);
         List<BrokerData> brokerDatas = topicRouteData.getBrokerDatas();
         Map<MessageQueue, Long> allOffsetTable = new HashMap<MessageQueue, Long>();
         if (brokerDatas != null) {
             for (BrokerData brokerData : brokerDatas) {
+                // 默认选择主节点，主节点下线，则随机选一个从
                 String addr = brokerData.selectBrokerAddr();
                 if (addr != null) {
                     Map<MessageQueue, Long> offsetTable =
