@@ -11,11 +11,11 @@ The source code in the repository has comments when I learn RocketMQ
 * RocketMQ-Transaction
 * RocketMQ-High Available
 
-Extra harvest:
-* Using Netty and principle
-* Distribution Transaction Practice
+Extra Get:
+* Usage of Netty
+* Distribution transaction practice
 * MappedByteBuffer and mmap system call
-* Master/Slave Synchronize Practice
+* Master/Slave synchronize practice
 * Find a bug in RocketMQ-Remoting (Concurrent Problem when create the channel).But I am 2 months late and this bug has been fixed. See [[ISSUE #1108] Fix concurrent problems with client-side connection creation #1109](https://github.com/apache/rocketmq/pull/1109)
 
 ### 源码分析笔记
